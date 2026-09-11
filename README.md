@@ -8,5 +8,7 @@ Built by a SOC analyst working in 24/7 MSSP operations. The scenarios and techni
 Phases:
 
 Phase 1 - Server deployment, endpoint enrollment, baseline triage collection
+
 Phase 2 - MFT collection and timeline building (coming)
+
 Phase 3 - Simulated compromise and detection (coming)
