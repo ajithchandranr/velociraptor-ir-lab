@@ -11,11 +11,16 @@ This phase covers:
 
 ## Lab Topology
 
+```
 Host Machine (Windows)
- └─ VirtualBox
- └─ Ubuntu Server 22.04 VM ← Velociraptor Server IP: 192.168.100.3
+    |
+    └── VirtualBox
+            |
+            └── Ubuntu Server 22.04 VM (Velociraptor Server)
+                    IP: 192.168.100.3
 
 Velociraptor Client: Windows host machine
+```
 
 
 ## Prerequisites
