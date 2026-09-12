@@ -170,6 +170,8 @@ Answer the prompts as follows:
 | Username | your choice |
 | Password | your choice |
 
+> ![Velociraptor Version](../screenshots/03-config-wizard_1.png)
+
 > **Note:** When the wizard asks for the public DNS/IP, enter the VM IP you confirmed in Step 2 - not `localhost` and not the old NAT IP `10.0.2.15`. Getting this wrong means clients will never be able to connect.
 
 This generates two files in `/opt/velociraptor/`:
@@ -190,4 +192,5 @@ Expected output:
 -rw-r--r-- 1 root root  server.config.yaml
 drwxr-xr-x 2 root root  datastore
 ```
+> ![Velociraptor Version](../screenshots/03-config-wizard_2.png)
 
