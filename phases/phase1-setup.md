@@ -140,5 +140,54 @@ compiler: go1.25.3
 system: linux
 architecture: amd64
 
+![Velociraptor Version](../screenshots/02-velociraptor-version.png)
 
 > **Note:** Always match the binary version between server and client. Mismatched versions cause silent connection failures during client enrollment.
+>
+> ![Velociraptor Version](../screenshots/02-velociraptor-version.png)
+
+---
+
+## Step 4 - Generate the Server Config
+
+Run the interactive config wizard:
+
+```bash
+sudo velociraptor config generate -i
+```
+
+Answer the prompts as follows:
+
+| Prompt | Answer |
+|---|---|
+| OS | Linux |
+| Datastore path | `/opt/velociraptor/datastore` |
+| Frontend port | `8000` |
+| GUI port | `8889` |
+| SSL type | Self Signed SSL |
+| DNS type | None - Configure DNS manually |
+| Public DNS/IP | `192.168.100.3` (your VM IP from Step 2) |
+| Username | your choice |
+| Password | your choice |
+
+> **Note:** When the wizard asks for the public DNS/IP, enter the VM IP you confirmed in Step 2 - not `localhost` and not the old NAT IP `10.0.2.15`. Getting this wrong means clients will never be able to connect.
+
+This generates two files in `/opt/velociraptor/`:
+
+- `server.config.yaml` - server configuration
+- `client.config.yaml` - client config to deploy to endpoints
+
+Confirm both files exist:
+
+```bash
+ls -lh /opt/velociraptor/
+```
+
+Expected output:
+
+```
+-rw-r--r-- 1 root root  client.config.yaml
+-rw-r--r-- 1 root root  server.config.yaml
+drwxr-xr-x 2 root root  datastore
+```
+
