@@ -484,3 +484,41 @@ Running  Velociraptor       Velociraptor
 Within 30 seconds of the service starting, open the Velociraptor GUI in the Ubuntu VM browser at `https://127.0.0.1:8889`. Your Windows machine should appear in the **Clients** tab.
 
 ![Client Enrolled](../screenshots/07-client-enrolled.png)
+
+## Run Baseline Collection
+
+Enrollment confirmed. Now do the most important thing you can 
+do before simulating any incident activity - capture what normal 
+looks like.
+
+In the GUI, click your enrolled client > **New Collection** > 
+add these artifacts:
+
+| Artifact | Why it matters |
+|---|---|
+| `Windows.System.Pslist` | Every running process, its parent, command line, and hash. Your first pivot during any investigation. |
+| `Windows.Network.Netstat` | Every active connection. Normal outbound traffic on a clean machine is your baseline for detecting C2 beaconing later. |
+| `Windows.System.Services` | Attackers persist via services. Knowing what's installed clean means any new entry post-compromise stands out immediately. |
+| `Windows.System.TaskScheduler` | Same logic as services - scheduled tasks are a common persistence mechanism. |
+| `Windows.Persistence.PermanentWMIEvents` | WMI subscriptions are invisible to most users and survive reboots. Empty on a clean machine is the expected result. |
+
+Click **Launch**. Wait for all green checkmarks.
+
+![Baseline Collection](../screenshots/08-baseline-collection_1.png)
+
+This collection is not just a setup step. It is the reference 
+point for everything that follows. When Phase 3 hunts fire on 
+a new process, a new service, or a new scheduled task - this 
+baseline is what you compare against. The delta is your signal.
+
+---
+
+### Take a Snapshot
+
+VirtualBox > Velociraptor VM > right-click > Take Snapshot
+Name: Phase1-Complete-Baseline
+
+
+Revert here any time the lab breaks. This is your known-good 
+restore point for all subsequent phases.
+
