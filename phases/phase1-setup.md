@@ -505,7 +505,7 @@ add these artifacts:
 Click **Launch**. Wait for all green checkmarks.
 
 ![Baseline Collection](../screenshots/08-baseline-collection_1.png)
-
+![Baseline Collection](../screenshots/08-baseline-collection_2.png)
 This collection is not just a setup step. It is the reference 
 point for everything that follows. When Phase 3 hunts fire on 
 a new process, a new service, or a new scheduled task - this 
