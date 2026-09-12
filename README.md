@@ -58,11 +58,3 @@ forensic visibility without waiting on change management or log
 onboarding.
 
 ---
-
-## Contents
-
-- `phase1/` - Server deployment and endpoint enrollment
-- `phase2/` - Forensic artifact collection (coming)
-- `phase3/` - Custom VQL artifact development (coming)
-- `phase4/` - Live response workflow (coming)
-- `phase5/` - Threat hunting notebook (coming)
