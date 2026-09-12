@@ -193,4 +193,24 @@ Expected output:
 drwxr-xr-x 2 root root  datastore
 ```
 > ![Velociraptor Version](../screenshots/03-config-wizard_2.png)
+>
+> markdown
+## Step 5 - Test the Server
+
+Run the server in test mode first to confirm it starts cleanly:
+
+```bash
+sudo velociraptor --config /opt/velociraptor/server.config.yaml frontend -v
+```
+
+Look for these two lines before proceeding:
+
+>GUI is ready to handle TLS requests on https://127.0.0.1:8889/
+>Frontend is ready to handle client TLS requests at https://192.168.100.3:8000/
+
+
+> **Note:** The GUI is bound to `127.0.0.1` only - this is intentional. It means the GUI is only accessible from inside the Ubuntu VM browser, not from the Windows host. This mirrors a real IR deployment where the analyst interface is never exposed directly to endpoints.
+
+![Server Test Run](../screenshots/04-server-test-run.png)
+Once confirmed, press `Ctrl+C` to stop the server and proceed to Step 6.
 
