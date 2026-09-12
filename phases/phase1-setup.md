@@ -276,3 +276,145 @@ Log in with the credentials you set during the config wizard.
 
 ![GUI Login](../screenshots/06-gui-login.png)
 
+---
+
+---
+
+## A Note on Real IR Deployments
+
+In this lab, the Velociraptor server runs inside a VirtualBox VM accessible only on the local network. In a real IR engagement the setup is different but the workflow is identical.
+
+<pre>
+Internet
+    |
+    ├── Endpoint (any location)
+    ├── Endpoint (any location)
+    └── Endpoint (any location)
+            |
+            └── All connect to ──► Velociraptor Server
+                                   (Cloud VM with public IP)
+                                   Analyst accesses GUI
+                                   over VPN or SSH tunnel
+</pre>
+
+The server runs on a cloud instance (AWS, Azure, GCP) with a real public IP. The client config has that public IP baked in. When the client is installed on any endpoint anywhere in the world it phones home to the server over port 8000.
+
+For remote helpline scenarios - where an individual contacts you suspecting compromise - the analyst sends a pre-packaged collector: a single executable with the client config already embedded. The person runs it with one double-click. Their device appears in the GUI within seconds and live triage begins immediately, regardless of where in the world they are.
+
+What we build in this lab mirrors that workflow exactly. VirtualBox NAT stands in for the internet. Everything else - the artifacts, the queries, the IR process - is the same.
+
+---
+
+## Step 8 - Deploy the Windows Client
+
+The client needs two things on the Windows machine:
+- The Velociraptor Windows executable
+- The `client.config.yaml` generated in Step 4
+
+### Transfer the client config to Windows
+
+On the Ubuntu VM, serve the file temporarily:
+
+```bash
+cd /opt/velociraptor
+sudo python3 -m http.server 9999
+```
+
+Add a temporary port forward on the Windows host so it can reach the file server. Open PowerShell as Administrator:
+
+```powershell
+$vbm = "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"
+& $vbm natnetwork modify --netname labnet --port-forward-4 "fileserver:tcp:[]:9999:[192.168.100.3]:9999"
+```
+
+Download the config:
+
+```powershell
+Invoke-WebRequest `
+  -Uri "http://127.0.0.1:9999/client.config.yaml" `
+  -OutFile "C:\Users\$env:USERNAME\client.config.yaml"
+```
+
+Confirm it downloaded:
+
+```powershell
+Get-Item "C:\Users\$env:USERNAME\client.config.yaml"
+```
+
+Expected output:
+-a---- 12-09-2026 2691 client.config.yaml
+
+
+Stop the Python server on Ubuntu with `Ctrl+C`.
+
+### Update the server URL in the config
+
+The config currently points to `192.168.100.3:8000` - your Windows machine cannot reach that IP directly through the NAT network. Update it to your Windows host's LAN IP so the port forward routes it correctly.
+
+Find your Windows LAN IP:
+
+```powershell
+ipconfig | findstr "IPv4"
+```
+
+Use the first IP shown - ignore any virtual adapter IPs from VMware or VirtualBox.
+
+Open the config and update the server URL:
+
+```powershell
+notepad "C:\Users\$env:USERNAME\client.config.yaml"
+```
+
+Find:
+
+```yaml
+Client:
+  server_urls:
+  - https://192.168.100.3:8000/
+```
+
+Change to:
+
+```yaml
+Client:
+  server_urls:
+  - https://<your-windows-lan-ip>:8000/
+```
+
+Save and close.
+
+### Download the Windows executable
+
+```powershell
+Invoke-WebRequest `
+  -Uri "https://github.com/Velocidex/velociraptor/releases/download/v0.77.2/velociraptor-v0.77.2-windows-amd64.exe" `
+  -OutFile "C:\Users\$env:USERNAME\velociraptor.exe"
+```
+
+### Install as a Windows service
+
+Run PowerShell as Administrator:
+
+```powershell
+# Create the required directory
+New-Item -ItemType Directory -Path "C:\Program Files\Velociraptor" -Force
+
+cd C:\Users\$env:USERNAME
+
+# Install as service
+.\velociraptor.exe --config client.config.yaml service install
+
+# Verify
+Get-Service -Name Velociraptor
+```
+
+Expected output:
+
+Status Name DisplayName
+
+Running Velociraptor Velociraptor
+
+
+> **Why install as a service and not run manually?** Running manually gives the client only your user's privileges. You will get `Access is denied` errors on protected system processes like `csrss.exe` and `wininit.exe`. Installed as a Windows service it runs as SYSTEM - full visibility across all processes, no access errors, and it survives reboots automatically.
+
+Within 30 seconds of the service starting, check the Velociraptor GUI in the Ubuntu VM browser. Your Windows machine should appear in the **Clients** tab.
