@@ -214,3 +214,65 @@ Look for these two lines before proceeding:
 ![Server Test Run](../screenshots/04-server-test-run.png)
 Once confirmed, press `Ctrl+C` to stop the server and proceed to Step 6.
 
+## Step 6 - Run Velociraptor as a systemd Service
+
+The test run confirmed the server starts cleanly. Now set it up as a persistent service so it survives reboots and runs automatically.
+
+Press `Ctrl+C` to stop the test run, then create the service file:
+
+```bash
+sudo nano /etc/systemd/system/velociraptor.service
+```
+
+Paste exactly this:
+
+```ini
+[Unit]
+Description=Velociraptor IR Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/velociraptor \
+  --config /opt/velociraptor/server.config.yaml \
+  frontend -v
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save with `Ctrl+O`, exit with `Ctrl+X`.
+
+Enable and start the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable velociraptor
+sudo systemctl start velociraptor
+sudo systemctl status velociraptor
+```
+
+Expected output:
+
+```
+● velociraptor.service - Velociraptor IR Server
+     Active: active (running)
+```
+![Service Running](../screenshots/05-service-running.png)
+
+## Step 7 - Access the GUI
+
+Open a browser inside the Ubuntu VM and navigate to:
+
+https://127.0.0.1:8889
+
+
+Log in with the credentials you set during the config wizard.
+
+![GUI Login](../screenshots/06-gui-login.png)
+
