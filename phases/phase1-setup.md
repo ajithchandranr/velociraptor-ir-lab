@@ -3,36 +3,41 @@
 ## Overview
 
 This phase covers:
-- Setting up the Ubuntu Server VM in VirtualBox
 - Configuring networking so the server and client can communicate
-- Installing Velociraptor and generating the server config
+- Installing Velociraptor on Ubuntu and generating the server config
+- Running the server as a persistent service
 - Deploying the Windows client
 - Running the first triage collection and capturing a clean baseline
 
+---
+
 ## Lab Topology
 
-```
 Host Machine (Windows)
-    |
-    └── VirtualBox
-            |
-            └── Ubuntu Server 22.04 VM (Velociraptor Server)
+|
+└── VirtualBox
+|
+└── Ubuntu Server 22.04 VM (Velociraptor Server)
+IP: 192.168.100.3
 
 Velociraptor Client: Windows host machine
-```
 
+
+---
 
 ## Prerequisites
 
 - VirtualBox installed on your Windows machine
-- Ubuntu Server 22.04 LTS ISO downloaded
+- Ubuntu Server 22.04 LTS running as a VM
 - Internet connection on the host machine
 
 ---
 
 ## Step 1 - Configure Networking
 
-By default, VirtualBox assigns VMs a NAT IP (`10.0.2.15`) that isolates them from the host machine and from each other. We need to create a dedicated NAT Network called `labnet` that allows communication between the Ubuntu VM and the Windows host via port forwarding.
+By default, VirtualBox assigns VMs a NAT IP (`10.0.2.15`) that isolates them from the host machine. We need to create a dedicated NAT Network called `labnet` that gives the Ubuntu VM a reachable IP, and forward the Velociraptor frontend port to the Windows host so the client can connect.
+
+> **Note:** The GUI stays inside the Ubuntu VM and is accessed from the Ubuntu browser only. This mirrors a real IR deployment where the analyst GUI is never exposed directly to endpoints.
 
 > **Note:** Shut down the Ubuntu VM before running these commands.
 
@@ -46,15 +51,94 @@ $vbm = "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"
 
 # Assign the Velociraptor VM to labnet
 & $vbm modifyvm "Velociraptor" --nic1 natnetwork --nat-network1 labnet
+
+# Forward only the frontend port - GUI stays inside the Ubuntu VM
+& $vbm natnetwork modify --netname labnet --port-forward-4 "frontend:tcp:[]:8000:[192.168.100.3]:8000"
+
+# Confirm
+& $vbm natnetwork list
 ```
 
-Boot the Ubuntu VM back up, then confirm the new IP:
+Expected output:
+
+Name: labnet
+Enabled: Yes
+Network: 192.168.100.0/24
+Gateway: 192.168.100.1
+DHCP Server: Yes
+Port-forwarding (ipv4)
+frontend:tcp:[]:8000:[192.168.100.3]:8000
+
+
+---
+
+## Step 2 - Verify Server IP
+
+Boot the Ubuntu VM and confirm the IP address:
 
 ```bash
 ip addr show | grep "inet " | grep -v 127.0.0.1
 ```
 
-Expected output: inet 192.168.100.3/24 brd 192.168.100.255 scope global dynamic noprefixroute enp0s3
+Expected output:
+
+inet 192.168.100.3/24 brd 192.168.100.255 scope global dynamic noprefixroute enp0s3
 
 
-> **Note:** Your IP may differ slightly - it will be somewhere in the `192.168.100.0/24` range. Note it down, you will need it in the next step.
+![VM IP Confirmation](../screenshots/01-vm-ip-confirmation.png)
+
+> **Note:** Your IP may differ slightly - it will be somewhere in the `192.168.100.0/24` range. Note it down, you will need it when generating the server config in Step 4.
+
+---
+
+## Step 3 - Install Velociraptor
+
+Create the working directory:
+
+```bash
+sudo mkdir -p /opt/velociraptor
+cd /opt/velociraptor
+```
+
+Update the package list and install wget:
+
+```bash
+sudo apt update && sudo apt install -y wget
+```
+
+Download the Velociraptor binary. Always check the latest release at:
+
+https://github.com/Velocidex/velociraptor/releases
+
+
+Then download:
+
+```bash
+wget https://github.com/Velocidex/velociraptor/releases/download/v0.77.2/velociraptor-v0.77.2-linux-amd64 -O velociraptor
+```
+
+Make it executable and move to PATH:
+
+```bash
+chmod +x velociraptor
+sudo mv velociraptor /usr/local/bin/velociraptor
+```
+
+Verify the installation:
+
+```bash
+velociraptor version
+```
+
+Expected output:
+
+name: velociraptor
+version: 0.77.2
+commit: c0c9dd609
+build_time: "2026-08-10T00:58:52Z"
+compiler: go1.25.3
+system: linux
+architecture: amd64
+
+
+> **Note:** Always match the binary version between server and client. Mismatched versions cause silent connection failures during client enrollment.
