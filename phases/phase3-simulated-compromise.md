@@ -643,3 +643,43 @@ for a PowerShell process.
 > not just what is active at collection time.
 
 ---
+
+## Findings Summary
+
+| Time (UTC) | Artifact | Finding |
+|---|---|---|
+| 19:06:58 | Prefetch | `powershell.exe` executed |
+| 19:07:06 | MFT | `payload.ps1` dropped to `AppData\Roaming\Microsoft\Windows\` |
+| 19:45:08 | Memory | PID 8524 - PowerShell session for scheduled task creation |
+| 19:45:14 | EVTX 4698 | `MicrosoftEdgeUpdateTaskMachineCore` scheduled task created |
+| 19:53:19 | Memory | PID 1780 - Live beacon process started |
+| 19:53:19+ | EVTX Sysmon 1 | `explorer.exe` > `powershell.exe` `-WindowStyle Hidden -ExecutionPolicy Bypass` |
+| 19:53:19+ | EVTX Sysmon 3 | 30-second beaconing to `192.168.100.3:4444` |
+| 19:53:19+ | EVTX 4104 | Full payload source logged verbatim |
+| Ongoing | Autoruns | `MicrosoftEdgeUpdateTaskMachineCore` - malicious LaunchString on signed binary |
+
+---
+
+## IOC List
+
+| Type | Value |
+|---|---|
+| File path | `C:\Users\acrkmr\AppData\Roaming\Microsoft\Windows\payload.ps1` |
+| File hash (SHA256) | `7BA2F894C3F5D6CE57FB57D7A3D5C5ADF051A35CDAC78E44303A8D0799CB57D5` |
+| LNK file | `C:\Users\acrkmr\Desktop\Iran-Election-2009-Witness-Testimonies.lnk` |
+| Scheduled task | `\MicrosoftEdgeUpdateTaskMachineCore` |
+| C2 IP | `192.168.100.3` |
+| C2 Port | `4444` |
+| C2 Protocol | HTTP POST to `/beacon` |
+| Beacon interval | 30 seconds |
+| Process | `powershell.exe` - `-WindowStyle Hidden -ExecutionPolicy Bypass` |
+| Parent process | `explorer.exe` (PID 4468) |
+| Beacon PID | `1780` |
+
+> **How to use this IOC list in a real engagement:**
+> Take the C2 IP and hunt every other endpoint in the environment
+> for the same outbound connection. Take the scheduled task name
+> and hunt every endpoint for that task. Take the file path pattern
+> and hunt for `.ps1` files in `AppData\Roaming\Microsoft\Windows\`
+> across the estate. One confirmed endpoint becomes the pivot point
+> for scoping the full breach.
