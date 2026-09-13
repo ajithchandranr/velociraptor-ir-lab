@@ -769,10 +769,6 @@ New Run key entry not in baseline                = persistence established
 Scheduled task not present in baseline           = new persistence mechanism
 WMI subscription where baseline showed none      = advanced persistence
 ```
-
-
----
-
 ## Artifact 5 - Memory Acquisition
 
 ### What Memory Collection Gives You
@@ -806,23 +802,15 @@ Before launching, click through to **Specify Resources** and update:
 |---|---|---|
 | Max MB uploaded | 1 GB | 4096 (match or exceed VM RAM) |
 
-> **Note:** The default 1GB upload limit will cut off memory 
-> acquisition on any machine with more than 1GB RAM. Always 
-> increase this before running memory collection.
+> **Note:** The default 1GB upload limit will cut off memory acquisition on any machine with more than 1GB RAM. Always increase this before running memory collection.
 
 ![Memory Collection Resources](../screenshots/phase2-05-memory-collection-resources.png)
 
 Click **Launch** to start the collection.
 
-> **Note:** Run memory acquisition last in the collection 
-> sequence. It captures point-in-time state - collect all 
-> other artifacts first so memory reflects the most complete 
-> picture of system activity.
+> **Note:** Run memory acquisition last in the collection sequence. It captures point-in-time state - collect all other artifacts first so memory reflects the most complete picture of system activity.
 
-> **Note:** On a small server you may hit a file handle limit 
-> error during acquisition. The default systemd limit is 1024. 
-> Fix it by adding `LimitNOFILE=999999` to the Velociraptor 
-> service file and restarting:
+> **Note:** On a small server you may hit a file handle limit error during acquisition. The default systemd limit is 1024. Fix it by adding `LimitNOFILE=999999` to the Velociraptor service file and restarting:
 >
 > ```bash
 > sudo nano /etc/systemd/system/velociraptor.service
@@ -852,8 +840,7 @@ FlareVM client > Collections > Windows.Memory.Acquisition
 > Results tab > Download Results > Prepare Download
 ```
 
-Wait for the download to be prepared, then click the zip file 
-link to download it to the Ubuntu VM.
+Wait for the download to be prepared, then click the zip file link to download it to the Ubuntu VM.
 
 ![Memory Collection Complete](../screenshots/phase2-05-memory-collection-complete.png)
 
@@ -867,13 +854,9 @@ SHA256:        5047d6cffd1103138f0f05c1b203c5ddb2705e34
                b788e06fb008d6071106ae5e
 ```
 
-> **Note:** The compressed size on disk (766 MB) will always 
-> be smaller than the uncompressed image size (2033 MB). 
-> Both values are correct - Velociraptor compresses uploads 
-> during storage.
+> **Note:** The compressed size on disk (766 MB) will always be smaller than the uncompressed image size (2033 MB). Both values are correct - Velociraptor compresses uploads during storage.
 
-After downloading, verify integrity against the SHA256 shown 
-in the GUI:
+After downloading, verify integrity against the SHA256 shown in the GUI:
 
 ```bash
 sha256sum /path/to/PhysicalMemory.dd
@@ -894,9 +877,7 @@ sha256sum /path/to/PhysicalMemory.dd
 
 ### What to Look for in Phase 3
 
-Memory analysis is deferred to Phase 3 where a simulated 
-compromise gives the image something meaningful to find. 
-On the post-compromise image the analysis will cover:
+Memory analysis is deferred to Phase 3 where a simulated compromise gives the image something meaningful to find. On the post-compromise image the analysis will cover:
 
 ```
 Process analysis
@@ -928,10 +909,8 @@ String extraction
   - Mutex names unique to malware families
 ```
 
-The baseline image captured here is the reference point. 
-Any process, connection, or memory region present in the 
-post-compromise image that was not in this baseline is a 
-finding.
+The baseline image captured here is the reference point. Any process, connection, or memory region present in the post-compromise image that was not in this baseline is a finding.
+
 ---
 
 ## Collection Summary
@@ -939,9 +918,9 @@ finding.
 | Artifact | Velociraptor Artifact Name | Key IR Value |
 |---|---|---|
 | MFT | `Windows.NTFS.MFT` | File timeline, timestomping detection |
-| Prefetch | `Windows.Analysis.Prefetch` | Execution history including deleted files |
+| Prefetch | `Windows.Forensics.Prefetch` | Execution history including deleted files |
 | Event Logs | `Windows.EventLogs.Evtx` | Authentication, process creation, persistence |
-| Registry | `Windows.Registry.NTUser` | Autorun entries, user activity |
+| Registry | `Windows.Sysinternals.Autoruns` | Autorun entries, persistence mechanisms |
 | Memory | `Windows.Memory.Acquisition` | In-memory malware, injected code |
 
 ---
@@ -955,5 +934,4 @@ VirtualBox > ACR-FlareVM > right-click > Take Snapshot
 Name: FlareVM-Phase2-Collections-Complete
 ```
 
-Phase 3 starts from here - simulated compromise, then 
-re-collection and analysis against this baseline.
+Phase 3 starts from here - simulated compromise, then re-collection and analysis against this baseline.
