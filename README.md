@@ -48,7 +48,7 @@ Host Machine (Windows)
 |---|---|---|
 | [Phase 1 - Server Deployment and Endpoint Enrollment](phases/phase1-setup.md) | Complete | Server setup, networking, client deployment, baseline collection |
 | [Phase 2 - Forensic Artifact Collection](phases/phase2-forensic-collection.md) | Complete | MFT, Prefetch, EVTX, Registry, Memory acquisition |
-| [Phase 3 - Simulated Compromise and Detection](phases/phase3-compromise.md) | Complete | LNK dropper, C2 beacon, persistence, artifact-based detection |
+| [Phase 3 - Simulated Compromise and Detection](phases/phase3-simulated-compromise.md) | Complete | LNK dropper, C2 beacon, persistence, artifact-based detection |
 
 ---
 
