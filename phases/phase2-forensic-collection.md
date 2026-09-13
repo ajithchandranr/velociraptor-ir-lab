@@ -255,9 +255,14 @@ The delta is the signal.
 
 ### What Prefetch Is
 
-Windows Prefetch records execution history. Every time a 
-binary runs, Windows creates or updates a `.pf` file in 
-`C:\Windows\Prefetch` containing:
+Windows Prefetch records execution history. Every time a binary 
+runs, Windows creates or updates a `.pf` file in 
+`C:\Windows\Prefetch`.
+
+Prefetch survives process termination and reboot. An attacker 
+can delete their payload from disk - Prefetch still shows it ran.
+
+Each prefetch file contains:
 
 ```
 - Executable name
@@ -269,11 +274,8 @@ binary runs, Windows creates or updates a `.pf` file in
 - Hash of the executable path
 ```
 
-Prefetch survives process termination and reboot. An attacker 
-can delete their payload from disk - Prefetch still shows it ran.
-
-> **Note:** Prefetch is enabled by default on workstations. 
-> It is disabled by default on Windows Server editions.
+> **Note:** Prefetch is enabled by default on workstations.
+> Disabled by default on Windows Server editions.
 
 > **Further reading:** [Windows Forensics - Prefetch](https://medium.com/@omaymaW/windows-forensics-prefetch-8447dbb6cd9b)
 
@@ -281,7 +283,7 @@ can delete their payload from disk - Prefetch still shows it ran.
 
 ### Running the Collection
 
-> **Note:** The artifact name changed in v0.77.2. Use 
+> **Note:** The artifact name changed in v0.77.2. Use
 > `Windows.Forensics.Prefetch` - not `Windows.Analysis.Prefetch`.
 
 ```
@@ -297,8 +299,6 @@ a clean FlareVM.
 
 ### Understanding Prefetch Record Fields
 
-A single prefetch record contains:
-
 ```
 Executable:       WMIPRVSE.EXE
 ExecutablePath:   \DEVICE\HARDDISKVOLUME3\WINDOWS\SYSTEM32\WBEM\WMIPRVSE.EXE
@@ -309,11 +309,11 @@ ModificationTime: 2026-09-13  ← when it was last updated
 Hash:             0XE8B8DD29  ← hash of the executable path
 ```
 
-`LastRunTimes` is an array - Windows stores the last 8 
-execution times per binary. During IR this lets you reconstruct 
-a timeline of when a tool was used, not just that it was used.
+`LastRunTimes` is an array - Windows stores the last 8 execution 
+times per binary. During IR this lets you reconstruct a timeline 
+of when a tool was used, not just that it was used.
 
-![Prefetch Collection](../screenshots/phase2-02-prefetch-collection_1.png)
+![Prefetch Fields](../screenshots/phase2-02-prefetch-collection_1.png)
 
 ---
 
@@ -341,19 +341,20 @@ ORDER BY LastRunTimes DESC
 
 ### Baseline Analysis - What Normal Looks Like
 
+![Prefetch Baseline](../screenshots/phase2-02-prefetch-collection_2.png)
+
 Two representative entries from a clean FlareVM:
 
-![Prefetch Collection](../screenshots/phase2-02-prefetch-collection_2.png)
-
-WMIPRVSE.EXE - spawns constantly as service host, high run count is normal 
-VSSVC.EXE    - ran today due to VirtualBox snapshot activity 
+| Executable | RunCount | Notes |
+|---|---|---|
+| WMIPRVSE.EXE | 42 | WMI Provider Host - spawns constantly, high run count is normal |
+| VSSVC.EXE | 6 | Volume Shadow Copy - ran today due to VirtualBox snapshot activity |
 
 Suspicious path query returned no results on clean FlareVM:
 
 ```
-Baseline result: no executions from temp or user-writable 
-locations on clean FlareVM. Any hit post-compromise is 
-immediately suspicious.
+Baseline: no executions from temp or user-writable locations.
+Any hit post-compromise is immediately suspicious.
 ```
 
 ---
@@ -361,10 +362,10 @@ immediately suspicious.
 ### What to Look for During the Simulated Compromise
 
 ```
-New prefetch entry in AppData\Local\Temp     = payload executed
-Executable with RunCount of 1               = ran once, possibly deleted after
-CreationTime matches compromise timeframe   = first execution aligns with attack
-LastRunTimes array with single entry        = ran once and never again
+New entry in AppData\Local\Temp    = payload executed from temp
+RunCount of 1                      = ran once, possibly deleted after
+CreationTime = compromise window   = first execution aligns with attack
+Single entry in LastRunTimes       = ran once and never again
 ```
 
 When the phishing payload executes in Phase 3, this artifact 
