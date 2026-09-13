@@ -453,6 +453,74 @@ pattern. In a real investigation `192.168.100.3` becomes the
 first IOC - pivot to every other endpoint in the environment
 and hunt for the same outbound connection.
 
+---
+
+## Detection - Artifact 4 - Autoruns
+
+### Query 1 - Unsigned and Third Party Entries
+
+```sql
+SELECT timestamp(epoch=Time) AS Time,
+  `Entry Location` AS Location,
+  Entry, Category, Enabled,
+  Signer, `Image Path` AS ImagePath,
+  MD5, `SHA-256` AS SHA256
+FROM source(artifact="Windows.Sysinternals.Autoruns")
+WHERE Enabled = "enabled"
+AND NOT Signer =~ "Microsoft Windows"
+AND NOT Signer =~ "Microsoft Corporation"
+ORDER BY Category
+```
+
+Results returned only known legitimate entries matching the
+Phase 2 baseline:
+
+> **The malicious task did not appear here.** The scheduled
+> task uses `PowerShell.exe` as its binary - a Microsoft-signed
+> binary. Signature-based filtering alone is not enough.
+
+---
+
+### Query 2 - Scheduled Task Hunt
+
+```sql
+SELECT timestamp(epoch=Time) AS Time,
+  `Entry Location` AS Location,
+  Entry, Category, Enabled,
+  Signer, `Image Path` AS ImagePath,
+  `Launch String` AS LaunchString
+FROM source(artifact="Windows.Sysinternals.Autoruns")
+WHERE Category = "Scheduled Tasks"
+AND Entry =~ "(?i)edge"
+```
+
+Results:
+
+![Autoruns Scheduled Task](../screenshots/phase3-13-autoruns-task.png)
+
+**Finding:** The signer shows `(Verified) Microsoft Windows`
+because the binary is `PowerShell.exe` - a legitimate Microsoft
+binary. The malicious part is the argument - `payload.ps1` from
+`AppData\Roaming\Microsoft\Windows`. Signature-based detection
+alone misses this entirely.
+
+> **This is living-off-the-land.** Attackers use legitimate
+> signed binaries to execute malicious scripts so signature-based
+> detection fails. The `LaunchString` is where the malice lives,
+> not the binary.
+
+> **No timestamp on the Autoruns entry.** Autoruns reads the
+> current state of persistence locations - it does not record
+> when an entry was created. Cross-reference with EVTX Event ID
+> 4698 to get the creation time:
+>
+> ```
+> 2026-09-13T19:45:14Z - MicrosoftEdgeUpdateTaskMachineCore created
+> ```
+>
+> Autoruns tells you what persistence exists. EVTX tells you
+> when it was created. Neither artifact alone gives the full picture.
+
 
 
 ---
