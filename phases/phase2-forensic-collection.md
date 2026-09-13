@@ -527,39 +527,50 @@ Default parameters collect all event log channels.
 ### VQL - What to Look at First
 
 ```sql
--- Successful logons
+-- Successful logons - parsed fields
 SELECT System.TimeCreated.SystemTime AS EventTime,
   System.Computer AS Computer,
-  System.Security.UserID AS UserID,
-  Message
+  EventData.SubjectUserName AS Subject,
+  EventData.TargetUserName AS LogonUser,
+  EventData.TargetDomainName AS Domain,
+  EventData.LogonType AS LogonType,
+  EventData.IpAddress AS SourceIP,
+  EventData.ProcessName AS Process
 FROM source(artifact="Windows.EventLogs.Evtx")
 WHERE System.EventID.Value = 4624
 ORDER BY EventTime DESC
 LIMIT 50
 ```
+![EVTX Collection](../screenshots/phase2-03-evtx-collection_logon.png)
 
 ```sql
--- Process creation with command line (requires audit policy enabled)
 SELECT System.TimeCreated.SystemTime AS EventTime,
   System.Computer AS Computer,
-  System.Security.UserID AS UserID,
-  Message
+  EventData.SubjectUserName AS User,
+  EventData.NewProcessName AS Process,
+  EventData.CommandLine AS CommandLine,
+  EventData.ParentProcessName AS ParentProcess
 FROM source(artifact="Windows.EventLogs.Evtx")
 WHERE System.EventID.Value = 4688
 ORDER BY EventTime DESC
-LIMIT 50
+LIMIT 20
 ```
+![EVTX Collection](../screenshots/phase2-03-evtx-collection_process_creation.png)
 
 ```sql
--- New services installed
 SELECT System.TimeCreated.SystemTime AS EventTime,
   System.Computer AS Computer,
-  Message
+  EventData.ServiceName AS ServiceName,
+  EventData.ImagePath AS ImagePath,
+  EventData.ServiceType AS ServiceType,
+  EventData.StartType AS StartType,
+  EventData.AccountName AS AccountName
 FROM source(artifact="Windows.EventLogs.Evtx")
 WHERE System.EventID.Value = 7045
 ORDER BY EventTime DESC
 LIMIT 20
 ```
+![EVTX Collection](../screenshots/phase2-03-evtx-collection_ new_services_installed.png)
 
 ```sql
 -- Sysmon process creation
