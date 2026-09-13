@@ -374,51 +374,7 @@ ran - even if the file is deleted from disk before collection.
 
 ---
 
-## Artifact 3 - Windows Event Logs (EVTX)
 
-### What EVTX Covers
-
-Windows Event Logs are the primary audit trail for security 
-events. Key channels for IR:
-
-| Channel | Event ID | What it captures |
-|---|---|---|
-| Security | 4624, 4625 | Logon success and failure |
-| Security | 4688 | Process creation with command line |
-| Security | 4698, 4702 | Scheduled task created or modified |
-| Security | 4720, 4732 | Account created, added to group |
-| System | 7045 | New service installed |
-| PowerShell | 4103, 4104 | Script block logging |
-
-### Running the Collection
-
-```
-FlareVM client > New Collection > Windows.EventLogs.Evtx > Launch
-```
-
-![EVTX Collection](../screenshots/phase2-03-evtx-collection.png)
-
-### VQL - What to Look at First
-
-```sql
--- Failed logons
-SELECT EventTime, Computer, 
-  EventData.TargetUserName AS User,
-  EventData.IpAddress AS SourceIP
-FROM source(artifact="Windows.EventLogs.Evtx")
-WHERE EventID = 4625
-ORDER BY EventTime DESC
-```
-
-```sql
--- New services installed
-SELECT EventTime, 
-  EventData.ServiceName, 
-  EventData.ImagePath
-FROM source(artifact="Windows.EventLogs.Evtx")
-WHERE EventID = 7045
-ORDER BY EventTime DESC
-```
 
 ---
 
