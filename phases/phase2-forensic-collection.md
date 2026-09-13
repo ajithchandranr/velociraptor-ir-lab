@@ -343,10 +343,10 @@ ORDER BY LastRunTimes DESC
 
 Two representative entries from a clean FlareVM:
 
-| Executable | ExecutablePath | RunCount | Notes |
-|---|---|---|---|
-| WMIPRVSE.EXE | \WINDOWS\SYSTEM32\WBEM\WMIPRVSE.EXE | 42 | WMI Provider Host - spawns constantly as service host, high run count is normal |
-| VSSVC.EXE | \WINDOWS\SYSTEM32\VSSVC.EXE | 6 | Volume Shadow Copy - ran today due to VirtualBox snapshot activity |
+![Prefetch Collection](../screenshots/phase2-02-prefetch-collection_2.png)
+
+WMIPRVSE.EXE - spawns constantly as service host, high run count is normal 
+VSSVC.EXE    - ran today due to VirtualBox snapshot activity 
 
 Suspicious path query returned no results on clean FlareVM:
 
