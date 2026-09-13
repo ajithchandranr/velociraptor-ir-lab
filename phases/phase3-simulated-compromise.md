@@ -43,11 +43,6 @@ cd /tmp/c2
 python3 -m http.server 4444
 ```
 
-Expected output:
-
-```bash
-Serving HTTP on 0.0.0.0 port 4444 (http://0.0.0.0:4444/) ...
-```
 
 > **What this does:** The Python HTTP server acts as the C2 receiver.
 > When FlareVM's payload beacons to `192.168.100.3:4444`, this server
@@ -91,22 +86,17 @@ $payloadContent | Out-File -FilePath $payloadPath -Encoding ASCII
 Get-Item $payloadPath
 ```
 
-Expected output:
+Output:
 
-```powershell
-    Directory: C:\Users\acrkmr\AppData\Roaming\Microsoft\Windows
+![Payload Created](../screenshots/phase3-01-payload-created.png)
 
-Mode                 LastWriteTime         Length Name
-----                 -------------         ------ ----
--a----        13/09/2026     20:07            521 payload.ps1
-```
 
 > **Why this path:** `AppData\Microsoft\Windows\` blends in with
 > legitimate Windows file structure. Real droppers land payloads here
 > specifically because it rarely gets scrutinised. This is what the
 > MFT and Prefetch artifacts will catch in the detection phase.
 
-![Payload Created](../screenshots/phase3-01-payload-created.png)
+
 
 ---
 
@@ -133,15 +123,7 @@ $lnk.Save()
 Get-Item $lnkPath
 ```
 
-Expected output:
-
-```powershell
-    Directory: C:\Users\acrkmr\Desktop
-
-Mode                 LastWriteTime         Length Name
-----                 -------------         ------ ----
--a----        13/09/2026     20:34           2052 Iran-Election-2009-Witness-Testimonies.lnk
-```
+Output:
 
 ![LNK Created](../screenshots/phase3-02-lnk-created.png)
 
@@ -178,13 +160,9 @@ Register-ScheduledTask `
 Get-ScheduledTask -TaskName $taskName | Select-Object TaskName, State
 ```
 
-Expected output:
+output:
 
-```powershell
-TaskName                              State
---------                              -----
-MicrosoftEdgeUpdateTaskMachineCore    Ready
-```
+![Scheduled Task Created](../screenshots/phase3-03-scheduled-task.png)
 
 > **Why this task name:** Attackers name persistence mechanisms
 > after legitimate Windows components. `MicrosoftEdgeUpdateTaskMachineCore`
@@ -192,6 +170,123 @@ MicrosoftEdgeUpdateTaskMachineCore    Ready
 > a malicious copy blends in unless you diff against a known baseline.
 > This is exactly what the Autoruns baseline from Phase 2 catches.
 
-![Scheduled Task Created](../screenshots/phase3-03-scheduled-task.png)
+
+
+---
+
+## Step 5 - Trigger the Kill Chain
+
+Double click `Iran-Election-2009-Witness-Testimonies.lnk` on the
+FlareVM desktop.
+
+The LNK executes silently. Within 30 seconds check the Ubuntu VM
+terminal for the beacon.
+
+Output on Ubuntu VM:
+
+![C2 Beacon](../screenshots/phase3-04-c2-beacon.png)
+
+
+> **Note:** The Python HTTP server returns 501 for POST requests -
+> this is expected. The connection still registers and is logged.
+> The beacon hit from `192.168.100.4` confirms the payload executed
+> and reached the C2 listener successfully.
+
+The kill chain is now complete:
+
+| Stage | Status |
+|---|---|
+| Payload dropped to disk | ✓ |
+| LNK dropper created | ✓ |
+| Scheduled task persistence | ✓ |
+| Beacon reaching C2 | ✓ |
+
+
+
+---
+
+## Step 6 - Artifact Collection
+
+Collect all five artifacts while the beacon is still running.
+Memory acquisition captures the live connection to the C2 listener.
+
+In the Velociraptor GUI on the Ubuntu VM:
+
+https://127.0.0.1:8889
+
+
+Select the FlareVM client > **New Collection** > add all five
+artifacts in this order:
+
+| Order | Artifact | Why |
+|---|---|---|
+| 1 | `Windows.NTFS.MFT` | File timeline - payload drop timestamp |
+| 2 | `Windows.Forensics.Prefetch` | Execution history - confirms payload ran |
+| 3 | `Windows.EventLogs.Evtx` | Scheduled task, process chain, script block |
+| 4 | `Windows.Sysinternals.Autoruns` | Persistence entry not in baseline |
+| 5 | `Windows.Memory.Acquisition` | Live beacon process and C2 connection |
+
+For `Windows.Memory.Acquisition` set **Max MB to 4096** before
+launching.
+
+> **Why collect in this order:** Memory is collected last because
+> it captures point-in-time state. All other artifacts are collected
+> first so memory reflects the most complete picture of activity -
+> including the live beacon connection to `192.168.100.3:4444`.
+
+Expected result - all five collections complete:
+
+![Collections Complete](../screenshots/phase3-05-collections-complete.png)
+
+---
+
+## Detection - Artifact 1 - MFT
+
+### Query 1 - Locate the Payload
+
+```sql
+SELECT FileName, OSPath, Created0x10, Created0x30, FileSize, InUse
+FROM source(artifact="Windows.NTFS.MFT")
+WHERE FileName =~ "(?i)payload"
+```
+
+Results:
+
+![MFT Payload Detection](../screenshots/phase3-06-mft-payload.png)
+
+**Findings:**
+
+- `AppData\Roaming\Microsoft\Windows\` is not a location legitimate
+  software writes scripts to. A `.ps1` file here is immediately suspicious.
+- SI and FN timestamps match - no timestomping attempt in this simulation.
+
+---
+
+### Query 2 - Timestomping Check
+
+```sql
+SELECT FileName, OSPath, Created0x10, Created0x30
+FROM source(artifact="Windows.NTFS.MFT")
+WHERE Created0x10 < Created0x30
+AND NOT IsDir
+LIMIT 100
+```
+
+Results returned Windows App Repository database files:
+
+![MFT Timestomp Check](../screenshots/phase3-07-mft-timestomp.png)
+
+These are false positives. The timestamp discrepancy reflects when
+the files were first created on the original system vs when they
+were written to this volume during FlareVM setup.
+
+> **Rule of thumb:**
+>
+> | Pattern | Verdict |
+> |---|---|
+> | System database + ProgramData + known Windows component | Benign |
+> | `.ps1` or `.exe` + AppData or Temp + recent timestamp | Investigate |
+
+No timestomping indicators on this machine.
 
 ---
