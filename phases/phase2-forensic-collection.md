@@ -119,6 +119,10 @@ per file containing:
 The MFT covers every file that ever existed on the volume - 
 including deleted ones, until the record is reused.
 
+> **Further reading:** [The MFT - The One Artifact I Check First on Every Windows Investigation](https://mohitdhabuwala17.medium.com/the-mft-the-one-artifact-i-check-first-on-every-windows-investigation-bc1fc32a730e)
+
+---
+
 ### Why Two Timestamp Sets Matter
 
 The `$STANDARD_INFORMATION` timestamps are easy to manipulate. 
@@ -140,6 +144,48 @@ $FILE_NAME Created:             2026-09-13 06:22:11  ← real
 
 Phase 3 builds a VQL hunt to detect this discrepancy at scale.
 
+---
+
+### Understanding MFT Record Fields
+
+A single MFT record looks like this:
+
+```
+EntryNumber:  0          ← MFT record number, 0 = the MFT itself
+InUse:        true       ← file exists, not deleted
+Links:        5          ← number of directory references
+FullPath:     \\.\C:\$MFT
+FileName:     $MFT
+FileSize:     295698432  ← size in bytes
+IsDir:        false      ← not a directory
+```
+
+Timestamp fields:
+
+```
+Created0x10   ← $STANDARD_INFORMATION Created  (easy to manipulate)
+Modified0x10  ← $STANDARD_INFORMATION Modified
+Accessed0x10  ← $STANDARD_INFORMATION Accessed
+Changed0x10   ← $STANDARD_INFORMATION Changed
+
+Created0x30   ← $FILE_NAME Created  (harder to fake)
+Modified0x30  ← $FILE_NAME Modified
+Accessed0x30  ← $FILE_NAME Accessed
+Changed0x30   ← $FILE_NAME Changed
+```
+
+Additional flags:
+
+```
+IsReparsePoint  ← symlink or junction point
+IsEncrypted     ← EFS encrypted
+IsCompressed    ← NTFS compressed
+IsSparse        ← sparse file
+NameType        ← DOS+Win32 means file has both long and short name
+```
+
+---
+
 ### Running the Collection
 
 ```
@@ -152,7 +198,11 @@ of 3-5 minutes.
 
 ![MFT Collection](../screenshots/phase2-01-mft-collection.png)
 
+---
+
 ### VQL - What to Look at First
+
+Run these in the Notebooks tab after collection completes:
 
 ```sql
 -- All files created in the last 7 days
@@ -165,15 +215,39 @@ ORDER BY Created0x10 DESC
 ```sql
 -- Timestomping indicator - SI and FN timestamps don't match
 SELECT FileName, FullPath, 
-  Created0x10 AS SI_Created, 
+  Created0x10 AS SI_Created,
   Created0x30 AS FN_Created
 FROM source(artifact="Windows.NTFS.MFT")
 WHERE Created0x10 < Created0x30
+AND NOT IsDir
+LIMIT 100
 ```
 
 > **Note:** `Created0x10` is `$STANDARD_INFORMATION`.
 > `Created0x30` is `$FILE_NAME`. When SI is earlier than FN
 > on a recently dropped file, suspect timestomping.
+
+---
+
+### Baseline Analysis - What Normal Looks Like
+
+Running the timestomping detection query on a clean FlareVM 
+before any simulated compromise produces results like these:
+
+![MFT Collection](../screenshots/phase2-01-mft-collection_1.png)
+
+### The Rule of Thumb
+
+```
+Round number timestamp + unexpected file location = investigate
+2001-01-01 00:00:00 on a file in AppData or Temp  = immediate flag
+2001-01-01 00:00:00 on a Windows system cab        = probably benign
+```
+
+This baseline is the reference point. When the simulated 
+compromise runs in Phase 3 and this query is re-run, any new 
+entries that were not present here are the malicious files.
+The delta is the signal.
 
 ---
 
