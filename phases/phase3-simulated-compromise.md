@@ -344,3 +344,115 @@ PowerShell ran and wrote the file.
 ---
 
 
+## Detection - Artifact 3 - EVTX
+
+### Query 1 - Scheduled Task Creation (Event ID 4698)
+
+```sql
+SELECT timestamp(epoch=System.TimeCreated.SystemTime) AS EventTime,
+  EventData.TaskName AS TaskName,
+  EventData.SubjectUserName AS User
+FROM source(artifact="Windows.EventLogs.Evtx")
+WHERE System.EventID.Value = 4698
+ORDER BY EventTime DESC
+```
+
+Results:
+
+![Scheduled Task Event](../screenshots/phase3-09-evtx-4698.png)
+
+**Finding:** `\MicrosoftEdgeUpdateTaskMachineCore` created at
+`19:45:14` - after the payload was dropped at `19:07:06`. The malicious
+task stands out immediately against the Phase 2 Autoruns baseline
+where this entry did not exist.
+
+
+
+---
+
+### Query 2 - PowerShell Script Block Logging (Event ID 4104)
+
+```sql
+SELECT timestamp(epoch=System.TimeCreated.SystemTime) AS EventTime,
+  EventData.ScriptBlockText AS ScriptBlock,
+  EventData.Path AS Path
+FROM source(artifact="Windows.EventLogs.Evtx")
+WHERE System.EventID.Value = 4104
+ORDER BY EventTime DESC
+LIMIT 20
+```
+
+**Findings - Full payload source logged verbatim & LNK creation commands logged :**
+
+![Script Block Logging](../screenshots/phase3-10-evtx-4104.png)
+
+> **Why this matters:** Even if an attacker base64-encodes or
+> obfuscates their payload, Event ID 4104 logs what actually
+> executed after decoding. The C2 IP, payload path, and full
+> script content are captured verbatim regardless of how the
+> payload was delivered.
+
+
+
+---
+
+### Query 3 - Sysmon Process Chain (Event ID 1)
+
+```sql
+SELECT timestamp(epoch=System.TimeCreated.SystemTime) AS EventTime,
+  EventData.Image AS Image,
+  EventData.CommandLine AS CommandLine,
+  EventData.ParentImage AS ParentImage,
+  EventData.IntegrityLevel AS IntegrityLevel
+FROM source(artifact="Windows.EventLogs.Evtx")
+WHERE System.Channel = "Microsoft-Windows-Sysmon/Operational"
+AND System.EventID.Value = 1
+AND EventData.Image =~ "(?i)powershell"
+ORDER BY EventTime DESC
+LIMIT 10
+```
+
+Results reconstruct the full kill chain timeline:
+
+![Sysmon Process Chain](../screenshots/phase3-11-evtx-sysmon-1.png)
+
+**Finding:** Every PowerShell execution is parented to
+`explorer.exe` - the user opened something that triggered it.
+The `-WindowStyle Hidden -ExecutionPolicy Bypass` flags are
+the detection signature. No legitimate software runs PowerShell
+hidden with execution policy bypassed.
+
+
+
+---
+
+### Query 4 - Sysmon Network Connections (Event ID 3)
+
+```sql
+SELECT timestamp(epoch=System.TimeCreated.SystemTime) AS EventTime,
+  EventData.Image AS Image,
+  EventData.DestinationIp AS DestIP,
+  EventData.DestinationPort AS DestPort,
+  EventData.SourceIp AS SourceIP
+FROM source(artifact="Windows.EventLogs.Evtx")
+WHERE System.Channel = "Microsoft-Windows-Sysmon/Operational"
+AND System.EventID.Value = 3
+AND EventData.Image =~ "(?i)powershell"
+ORDER BY EventTime DESC
+LIMIT 20
+```
+
+Results:
+
+![Sysmon Network](../screenshots/phase3-12-evtx-sysmon-3.png)
+
+**Finding:** Regular 30-second beaconing from `powershell.exe`
+to `192.168.100.3:4444`. Consistent intervals from a single
+process to a single destination is the textbook C2 beaconing
+pattern. In a real investigation `192.168.100.3` becomes the
+first IOC - pivot to every other endpoint in the environment
+and hunt for the same outbound connection.
+
+
+
+---
