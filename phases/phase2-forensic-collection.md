@@ -573,17 +573,24 @@ LIMIT 20
 ![EVTX Collection](../screenshots/phase2-03-evtx-collection_ new_services_installed.png)
 
 ```sql
--- Sysmon process creation
-SELECT System.TimeCreated.SystemTime AS EventTime,
+SELECT timestamp(epoch=System.TimeCreated.SystemTime) AS EventTime,
   System.Computer AS Computer,
-  Message
+  EventData.Image AS Image,
+  EventData.CommandLine AS CommandLine,
+  EventData.User AS User,
+  EventData.IntegrityLevel AS IntegrityLevel,
+  EventData.Hashes AS Hashes,
+  EventData.ParentImage AS ParentImage,
+  EventData.ParentCommandLine AS ParentCommandLine,
+  EventData.ProcessGuid AS ProcessGuid,
+  EventData.ParentProcessGuid AS ParentProcessGuid
 FROM source(artifact="Windows.EventLogs.Evtx")
 WHERE System.Channel = "Microsoft-Windows-Sysmon/Operational"
 AND System.EventID.Value = 1
 ORDER BY EventTime DESC
 LIMIT 50
 ```
-
+![EVTX Collection](../screenshots/phase2-03-evtx-collection_ sysmon.png)
 ---
 
 ### Baseline Analysis - What Normal Looks Like
