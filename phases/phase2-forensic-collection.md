@@ -263,39 +263,113 @@ binary runs, Windows creates or updates a `.pf` file in
 - Executable name
 - Full path to the executable
 - First run time
-- Last run time
-- Run count
+- Last run time - stored as an array, last 8 run times recorded
+- Run count - total number of executions
 - Files and directories accessed during execution
+- Hash of the executable path
 ```
 
 Prefetch survives process termination and reboot. An attacker 
 can delete their payload from disk - Prefetch still shows it ran.
 
+> **Note:** Prefetch is enabled by default on workstations. 
+> It is disabled by default on Windows Server editions.
+
+> **Further reading:** [Windows Forensics - Prefetch](https://medium.com/@omaymaW/windows-forensics-prefetch-8447dbb6cd9b)
+
+---
+
 ### Running the Collection
 
+> **Note:** The artifact name changed in v0.77.2. Use 
+> `Windows.Forensics.Prefetch` - not `Windows.Analysis.Prefetch`.
+
 ```
-FlareVM client > New Collection > Windows.Analysis.Prefetch > Launch
+FlareVM client > New Collection > Windows.Forensics.Prefetch > Launch
 ```
 
+Default parameters are fine. Collection returns 282 rows on 
+a clean FlareVM.
+
 ![Prefetch Collection](../screenshots/phase2-02-prefetch-collection.png)
+
+---
+
+### Understanding Prefetch Record Fields
+
+A single prefetch record contains:
+
+```
+Executable:       WMIPRVSE.EXE
+ExecutablePath:   \DEVICE\HARDDISKVOLUME3\WINDOWS\SYSTEM32\WBEM\WMIPRVSE.EXE
+LastRunTimes:     ["2026-09-13T08:16:01Z", "2026-09-13T08:09:18Z", ...]
+RunCount:         42
+CreationTime:     2025-12-27  ← when the prefetch file was first created
+ModificationTime: 2026-09-13  ← when it was last updated
+Hash:             0XE8B8DD29  ← hash of the executable path
+```
+
+`LastRunTimes` is an array - Windows stores the last 8 
+execution times per binary. During IR this lets you reconstruct 
+a timeline of when a tool was used, not just that it was used.
+
+![Prefetch Collection](../screenshots/phase2-02-prefetch-collection_1.png)
+
+---
 
 ### VQL - What to Look at First
 
 ```sql
--- All executions in the last 24 hours
-SELECT Name, FullPath, LastRunTime, RunCount
-FROM source(artifact="Windows.Analysis.Prefetch")
-WHERE LastRunTime > now() - 86400
-ORDER BY LastRunTime DESC
+-- All executions sorted by most recent
+SELECT Executable, ExecutablePath, 
+  LastRunTimes, RunCount, 
+  CreationTime, ModificationTime
+FROM source(artifact="Windows.Forensics.Prefetch")
+ORDER BY LastRunTimes DESC
+LIMIT 50
 ```
 
 ```sql
--- Suspicious execution paths
-SELECT Name, FullPath, LastRunTime, RunCount
-FROM source(artifact="Windows.Analysis.Prefetch")
-WHERE FullPath =~ "(?i)(temp|appdata|downloads|public)"
-ORDER BY LastRunTime DESC
+-- Suspicious execution paths - temp and user-writable locations
+SELECT Executable, ExecutablePath, LastRunTimes, RunCount
+FROM source(artifact="Windows.Forensics.Prefetch")
+WHERE ExecutablePath =~ "(?i)(temp|appdata\\local\\temp|downloads|public|programdata)"
+ORDER BY LastRunTimes DESC
 ```
+
+---
+
+### Baseline Analysis - What Normal Looks Like
+
+Two representative entries from a clean FlareVM:
+
+| Executable | ExecutablePath | RunCount | Notes |
+|---|---|---|---|
+| WMIPRVSE.EXE | \WINDOWS\SYSTEM32\WBEM\WMIPRVSE.EXE | 42 | WMI Provider Host - spawns constantly as service host, high run count is normal |
+| VSSVC.EXE | \WINDOWS\SYSTEM32\VSSVC.EXE | 6 | Volume Shadow Copy - ran today due to VirtualBox snapshot activity |
+
+Suspicious path query returned no results on clean FlareVM:
+
+```
+Baseline result: no executions from temp or user-writable 
+locations on clean FlareVM. Any hit post-compromise is 
+immediately suspicious.
+```
+
+---
+
+### What to Look for During the Simulated Compromise
+
+```
+New prefetch entry in AppData\Local\Temp     = payload executed
+Executable with RunCount of 1               = ran once, possibly deleted after
+CreationTime matches compromise timeframe   = first execution aligns with attack
+LastRunTimes array with single entry        = ran once and never again
+```
+
+When the phishing payload executes in Phase 3, this artifact 
+will show the executable name, full path, and exact time it 
+ran - even if the file is deleted from disk before collection.
 
 ---
 
