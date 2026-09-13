@@ -387,11 +387,6 @@ configured before meaningful IR data is available.
 > will rarely be pre-configured on the target device. Collection 
 > relies on whatever Windows has logged by default. Detection 
 > coverage will be narrower - native logs only, no Sysmon.
->
-> In environments with Microsoft Defender for Endpoint deployed, 
-> Sysmon is typically redundant - MDE provides equivalent 
-> telemetry via Advanced Hunting. Replace Sysmon VQL queries 
-> with equivalent KQL in that context.
 
 ---
 
@@ -422,15 +417,6 @@ auditpol /set /subcategory:"Sensitive Privilege Use" /success:enable /failure:en
 
 # PowerShell script block logging
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" /v EnableScriptBlockLogging /t REG_DWORD /d 1 /f
-```
-
-Confirm settings:
-
-```powershell
-auditpol /get /category:"Detailed Tracking"
-auditpol /get /category:"Logon/Logoff"
-```
-
 ```
 
 > **Note:** Take a snapshot after configuring audit policy and 
@@ -467,15 +453,6 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon
 # Install
 cd C:\Windows\Temp\Sysmon
 .\Sysmon64.exe -accepteula -i ..\sysmonconfig.xml
-```
-
-Expected output:
-
-```
-Sysmon64 installed.
-SysmonDrv installed.
-SysmonDrv started.
-Sysmon64 started.
 ```
 
 **Why Sysmon over native auditing:**
@@ -539,9 +516,6 @@ Default parameters collect all event log channels.
 ---
 
 ### VQL - What to Look at First
-
-> **Note:** All queries use `timestamp(epoch=System.TimeCreated.SystemTime)` 
-> to convert epoch values to readable UTC timestamps.
 
 **Successful logons:**
 
@@ -628,10 +602,10 @@ Confirmed present on a clean FlareVM after audit policy
 configuration and Sysmon installation:
 
 ```
-4624  - Service logon events (Logon Type 5) from services.exe  
-4688  - Process creation events with full command line          
-7045  - Velociraptor service install captured                   
-Sysmon Event ID 1 - Process creation with full telemetry       
+4624  - Service logon events (Logon Type 5) from services.exe
+4688  - Process creation events with full command line
+7045  - Velociraptor service install captured
+Sysmon Event ID 1 - Process creation with full telemetry
 ```
 
 **Logon type reference:**
@@ -642,33 +616,11 @@ Type 3   = Network           - remote access, file share
 Type 4   = Batch             - scheduled task execution
 Type 5   = Service           - service account (normal on clean machine)
 Type 7   = Unlock            - screen unlock
-Type 10  = RemoteInteractive - RDP session
-Type 11  = CachedInteractive - offline domain logon
-```
-
-**Investigation triggers during simulated compromise:**
+Type 10  = RemoteInteractive
 
 ```
-Logon Type 3 from unexpected SourceIP   = lateral movement
-Logon Type 10 where RDP not used before = RDP-based intrusion
-New 7045 with ImagePath in Temp         = malicious service
-4688 CommandLine with encoded payload   = PowerShell abuse
-Sysmon Event 1 from AppData or Temp    = payload execution
-```
-
 ---
 
-### Snapshot Summary
-
-```
-FlareVM-Audit-Configured-NoSysmon   → Scenario B starting point (Helpline)
-FlareVM-Sysmon-Installed-Baseline   → Scenario A starting point (MSSP)
-```
-
-Revert to the appropriate snapshot before each simulated 
-compromise scenario in Phase 3.
-
----
 
 ## Artifact 4 - Registry Hives
 
