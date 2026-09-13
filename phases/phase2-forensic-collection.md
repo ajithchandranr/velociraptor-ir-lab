@@ -387,6 +387,11 @@ configured before meaningful IR data is available.
 > will rarely be pre-configured on the target device. Collection 
 > relies on whatever Windows has logged by default. Detection 
 > coverage will be narrower - native logs only, no Sysmon.
+>
+> In environments with Microsoft Defender for Endpoint deployed, 
+> Sysmon is typically redundant - MDE provides equivalent 
+> telemetry via Advanced Hunting. Replace Sysmon VQL queries 
+> with equivalent KQL in that context.
 
 ---
 
@@ -426,20 +431,17 @@ auditpol /get /category:"Detailed Tracking"
 auditpol /get /category:"Logon/Logoff"
 ```
 
-Expected output:
-
-```
-Detailed Tracking
-  Process Creation    Success and Failure
-
-Logon/Logoff
-  Logon               Success and Failure
 ```
 
-> **Note:** Take a snapshot after configuring audit policy - 
-> `FlareVM-Audit-Configured-NoSysmon`. This is the Scenario B 
-> starting point where no Sysmon is present, mirroring a 
-> helpline engagement.
+> **Note:** Take a snapshot after configuring audit policy and 
+> before installing Sysmon:
+>
+> ```
+> Name: FlareVM-Audit-Configured-NoSysmon
+> ```
+>
+> This is the Scenario B starting point - mirrors a helpline 
+> engagement where Sysmon is not present on the device.
 
 ---
 
@@ -492,10 +494,13 @@ calling the same Windows API functions share the same IMPHASH -
 useful for clustering related malware families even when file 
 hashes differ.
 
-> **Helpline note:** Sysmon will not be present on a helpline 
-> target device. Phase 3 detection logic notes where Sysmon 
-> provides additional signal and where native logs alone are 
-> sufficient for the same detection.
+> **Note:** Take a snapshot after Sysmon installation:
+>
+> ```
+> Name: FlareVM-Sysmon-Installed-Baseline
+> ```
+>
+> This is the Scenario A starting point for the MSSP simulation.
 
 ---
 
@@ -535,9 +540,8 @@ Default parameters collect all event log channels.
 
 ### VQL - What to Look at First
 
-> **Note:** Use `timestamp(epoch=System.TimeCreated.SystemTime)` 
-> to convert epoch values to readable UTC timestamps. Applied 
-> to all queries below.
+> **Note:** All queries use `timestamp(epoch=System.TimeCreated.SystemTime)` 
+> to convert epoch values to readable UTC timestamps.
 
 **Successful logons:**
 
@@ -590,7 +594,8 @@ WHERE System.EventID.Value = 7045
 ORDER BY EventTime DESC
 LIMIT 20
 ```
-![Process Creation](../screenshots/phase2-03-evtx-collection_process_creation.png)
+
+![New Services](../screenshots/phase2-03-evtx-collection_new_services_installed.png)
 
 **Sysmon process creation - full telemetry:**
 
@@ -613,7 +618,7 @@ ORDER BY EventTime DESC
 LIMIT 50
 ```
 
-![Sysmon Events](../screenshots/phase2-03-evtx-collection_%20sysmon.png)
+![Sysmon Events](../screenshots/phase2-03-evtx-collection_sysmon.png)
 
 ---
 
@@ -623,10 +628,10 @@ Confirmed present on a clean FlareVM after audit policy
 configuration and Sysmon installation:
 
 ```
-4624  - Service logon events (Logon Type 5) from services.exe  ✓
-4688  - Process creation events with full command line          ✓
-7045  - Velociraptor service install captured                   ✓
-Sysmon Event ID 1 - Process creation with full telemetry       ✓
+4624  - Service logon events (Logon Type 5) from services.exe  
+4688  - Process creation events with full command line          
+7045  - Velociraptor service install captured                   
+Sysmon Event ID 1 - Process creation with full telemetry       
 ```
 
 **Logon type reference:**
@@ -644,29 +649,24 @@ Type 11  = CachedInteractive - offline domain logon
 **Investigation triggers during simulated compromise:**
 
 ```
-Logon Type 3 from unexpected SourceIP  = lateral movement
+Logon Type 3 from unexpected SourceIP   = lateral movement
 Logon Type 10 where RDP not used before = RDP-based intrusion
-New 7045 entry with ImagePath in Temp  = malicious service
-4688 CommandLine with encoded payload  = PowerShell abuse
-Sysmon Event 1 from AppData or Temp   = payload execution
+New 7045 with ImagePath in Temp         = malicious service
+4688 CommandLine with encoded payload   = PowerShell abuse
+Sysmon Event 1 from AppData or Temp    = payload execution
 ```
 
 ---
 
-### Snapshot
-
-After audit policy configuration and Sysmon installation, 
-take a snapshot before any compromise activity:
+### Snapshot Summary
 
 ```
-VirtualBox > ACR-FlareVM > right-click > Take Snapshot
-Name: FlareVM-Sysmon-Installed-Baseline
+FlareVM-Audit-Configured-NoSysmon   → Scenario B starting point (Helpline)
+FlareVM-Sysmon-Installed-Baseline   → Scenario A starting point (MSSP)
 ```
 
-```
-Scenario A (MSSP)     → start from FlareVM-Sysmon-Installed-Baseline
-Scenario B (Helpline) → revert to FlareVM-Audit-Configured-NoSysmon
-```
+Revert to the appropriate snapshot before each simulated 
+compromise scenario in Phase 3.
 
 ---
 
