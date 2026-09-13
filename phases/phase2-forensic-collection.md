@@ -666,8 +666,7 @@ WHERE KeyPath =~ "CurrentVersion\\\\Run"
 
 ### What Memory Collection Gives You
 
-A memory image captures the running state of the system at 
-the moment of collection:
+A memory image captures the running state of the system at the moment of collection:
 
 ```
 - Every running process including injected code
@@ -675,24 +674,153 @@ the moment of collection:
 - Network connections at time of capture
 - Loaded DLLs including reflectively loaded ones
 - Attacker tooling that never touches disk
+- Credential material in LSASS
 ```
+
+Unlike every other artifact in this phase, memory is volatile - it exists only while the machine is running. Once the machine is powered off or rebooted, this data is gone. Collect it before anything else changes on the system.
+
+> **Helpline note:** On a device suspected of spyware infection, memory acquisition is one of the highest value collections. Spyware like Pegasus operates entirely in memory and leaves minimal disk artifacts. A memory image may be the only place the implant is visible.
+
+---
 
 ### Running the Collection
 
 ```
-FlareVM client > New Collection > Windows.Memory.Acquisition > Launch
+FlareVM client > New Collection > Windows.Memory.Acquisition
 ```
 
-![Memory Collection](../screenshots/phase2-05-memory-collection.png)
+Before launching, click through to **Specify Resources** and update:
 
-> **Note:** Memory acquisition produces output equal to the VM's 
-> RAM allocation. A 4GB RAM VM produces a ~4GB image. Ensure the 
-> server has sufficient disk space before running.
+| Setting | Default | Change to |
+|---|---|---|
+| Max MB uploaded | 1 GB | 4096 (match or exceed VM RAM) |
 
-> **Note:** Run memory acquisition last. It captures point-in-time 
-> state - collect all other artifacts first so memory reflects the 
-> most complete picture of system activity.
+> **Note:** The default 1GB upload limit will cut off memory 
+> acquisition on any machine with more than 1GB RAM. Always 
+> increase this before running memory collection.
 
+![Memory Collection Resources](../screenshots/phase2-05-memory-collection-resources.png)
+
+Click **Launch** to start the collection.
+
+> **Note:** Run memory acquisition last in the collection 
+> sequence. It captures point-in-time state - collect all 
+> other artifacts first so memory reflects the most complete 
+> picture of system activity.
+
+> **Note:** On a small server you may hit a file handle limit 
+> error during acquisition. The default systemd limit is 1024. 
+> Fix it by adding `LimitNOFILE=999999` to the Velociraptor 
+> service file and restarting:
+>
+> ```bash
+> sudo nano /etc/systemd/system/velociraptor.service
+> ```
+>
+> Add under `[Service]`:
+>
+> ```ini
+> LimitNOFILE=999999
+> ```
+>
+> Then reload and restart:
+>
+> ```bash
+> sudo systemctl daemon-reload
+> sudo systemctl restart velociraptor
+> ```
+
+---
+
+### Downloading and Verifying the Collection
+
+Once the collection completes, download the image from the GUI:
+
+```
+FlareVM client > Collections > Windows.Memory.Acquisition
+> Results tab > Download Results > Prepare Download
+```
+
+Wait for the download to be prepared, then click the zip file 
+link to download it to the Ubuntu VM.
+
+![Memory Collection Complete](../screenshots/phase2-05-memory-collection-complete.png)
+
+The collection summary shows:
+
+```
+Uncompressed:  2033 MB
+Compressed:    766 MB
+Duration:      105 seconds
+SHA256:        5047d6cffd1103138f0f05c1b203c5ddb2705e34
+               b788e06fb008d6071106ae5e
+```
+
+> **Note:** The compressed size on disk (766 MB) will always 
+> be smaller than the uncompressed image size (2033 MB). 
+> Both values are correct - Velociraptor compresses uploads 
+> during storage.
+
+After downloading, verify integrity against the SHA256 shown 
+in the GUI:
+
+```bash
+sha256sum /path/to/PhysicalMemory.dd
+```
+
+---
+
+### Collection Output Fields
+
+| Field | IR Relevance |
+|---|---|
+| `NtBuildNumber` | Windows build - needed for Volatility symbol selection in Phase 3 |
+| `KernelBase` | Where the kernel is loaded - used for KASLR bypass detection |
+| `CR3` | Page table base - used for process memory reconstruction |
+| `SHA256` | Integrity verification - confirm image has not been corrupted |
+
+---
+
+### What to Look for in Phase 3
+
+Memory analysis is deferred to Phase 3 where a simulated 
+compromise gives the image something meaningful to find. 
+On the post-compromise image the analysis will cover:
+
+```
+Process analysis
+  - New processes not present in the baseline pslist
+  - PPID spoofing - process claims wrong parent
+  - Legitimate process name running from unexpected path
+
+Code injection indicators
+  - RWX memory regions (read-write-execute)
+    legitimate code is rarely RWX
+  - Unsigned code inside a signed process memory space
+  - VAD anomalies - memory regions with no backing file on disk
+    indicates injected shellcode or reflectively loaded DLL
+
+Network artifacts
+  - C2 IP and port visible in process memory
+  - Beacon configuration strings
+  - Active or recently closed connections at capture time
+
+Credential material
+  - LSASS memory - NTLM hashes, Kerberos tickets
+  - Plaintext passwords in some configurations
+
+String extraction
+  - URLs and IP addresses
+  - Registry paths the malware writes to
+  - Dropped payload file paths
+  - Encryption keys
+  - Mutex names unique to malware families
+```
+
+The baseline image captured here is the reference point. 
+Any process, connection, or memory region present in the 
+post-compromise image that was not in this baseline is a 
+finding.
 ---
 
 ## Collection Summary
