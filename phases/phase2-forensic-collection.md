@@ -880,33 +880,11 @@ sha256sum /path/to/PhysicalMemory.dd
 Memory analysis is deferred to Phase 3 where a simulated compromise gives the image something meaningful to find. On the post-compromise image the analysis will cover:
 
 ```
-Process analysis
-  - New processes not present in the baseline pslist
-  - PPID spoofing - process claims wrong parent
-  - Legitimate process name running from unexpected path
-
-Code injection indicators
-  - RWX memory regions (read-write-execute)
-    legitimate code is rarely RWX
-  - Unsigned code inside a signed process memory space
-  - VAD anomalies - memory regions with no backing file on disk
-    indicates injected shellcode or reflectively loaded DLL
-
-Network artifacts
-  - C2 IP and port visible in process memory
-  - Beacon configuration strings
-  - Active or recently closed connections at capture time
-
-Credential material
-  - LSASS memory - NTLM hashes, Kerberos tickets
-  - Plaintext passwords in some configurations
-
-String extraction
-  - URLs and IP addresses
-  - Registry paths the malware writes to
-  - Dropped payload file paths
-  - Encryption keys
-  - Mutex names unique to malware families
+- Process analysis
+- Code injection indicators
+- Network artifacts
+- Credential material
+- String extraction
 ```
 
 The baseline image captured here is the reference point. Any process, connection, or memory region present in the post-compromise image that was not in this baseline is a finding.
