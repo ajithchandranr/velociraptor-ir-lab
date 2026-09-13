@@ -621,44 +621,155 @@ Type 10  = RemoteInteractive
 ```
 ---
 
-
-## Artifact 4 - Registry Hives
+## Artifact 4 - Registry
 
 ### What the Registry Covers for IR
 
 The registry stores configuration, user activity, and 
-persistence mechanisms. Key locations:
+persistence mechanisms. Two artifacts cover different angles:
 
-| Key | What it stores |
+```
+Windows.Registry.NTUser        - per-user registry hive (NTUSER.DAT)
+                                 recently accessed files, run history,
+                                 user-specific autorun entries
+
+Windows.Sysinternals.Autoruns  - all persistence locations in one collection
+                                 run keys, services, scheduled tasks,
+                                 startup folders, WMI subscriptions,
+                                 browser extensions, drivers, codecs
+```
+
+For IR, `Autoruns` is the primary collection. `NTUser` is 
+most valuable during an active investigation for user activity 
+forensics - recently accessed files, typed URLs, search history.
+
+> **Helpline note:** Autoruns output is one of the first things 
+> to collect. A compromised device will often show persistence 
+> entries the user has never seen or installed. Walk the person 
+> through what you are looking for and why - transparency is 
+> part of the engagement.
+
+---
+
+### Key Registry Locations for IR
+
+| Location | What it stores |
 |---|---|
-| `HKLM\...\CurrentVersion\Run` | System-wide autorun entries |
-| `HKCU\...\CurrentVersion\Run` | Per-user autorun entries |
-| `HKLM\SYSTEM\...\Services` | Installed services |
+| `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` | System-wide autorun entries |
+| `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` | Per-user autorun entries |
+| `HKLM\SYSTEM\CurrentControlSet\Services` | Installed services and drivers |
 | `HKCU\...\Explorer\RecentDocs` | Recently opened files |
 | `HKCU\...\Explorer\RunMRU` | Commands run via Run dialog |
+| `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon` | Winlogon hijack persistence |
+| `HKLM\SYSTEM\...\Terminal Server\Wds\rdpwd\StartupPrograms` | RDP startup programs |
+
+---
 
 ### Running the Collection
 
+**Primary:**
+
+```
+FlareVM client > New Collection > Windows.Sysinternals.Autoruns > Launch
+```
+
+**Supplementary:**
+
 ```
 FlareVM client > New Collection > Windows.Registry.NTUser > Launch
+Parameters:
+  KeyGlob: Software\Microsoft\Windows\CurrentVersion\**
 ```
 
-For persistence-focused collection:
+> **Note:** `Windows.Registry.NTUser` in v0.77.2 returns 
+> `OSPath` as a JSON object. Direct regex filtering does not 
+> work - scroll results or export and search offline. Default 
+> parameter scopes to `ComDlg32` only - change `KeyGlob` to 
+> `Software\Microsoft\Windows\CurrentVersion\**` for broader 
+> coverage.
 
-```
-FlareVM client > New Collection > Windows.Registry.Sysinternals.Autoruns > Launch
-```
+![Autoruns Collection](../screenshots/phase2-04-registry-autoruns.png)
 
-![Registry Collection](../screenshots/phase2-04-registry-collection.png)
+---
 
 ### VQL - What to Look at First
 
+**All enabled persistence entries:**
+
 ```sql
--- All autorun entries
-SELECT Hive, KeyPath, Name, Data
-FROM source(artifact="Windows.Registry.NTUser")
-WHERE KeyPath =~ "CurrentVersion\\\\Run"
+SELECT timestamp(epoch=Time) AS Time,
+  Location, Entry, Enabled, Category,
+  Description, Signer, ImagePath, MD5, SHA256
+FROM source(artifact="Windows.Sysinternals.Autoruns")
+WHERE Enabled = "enabled"
+ORDER BY Category
 ```
+
+![Autoruns Results](../screenshots/phase2-04-registry-autoruns_1.png)
+
+**Unsigned or third-party signed entries - highest priority:**
+
+```sql
+SELECT timestamp(epoch=Time) AS Time,
+  Location, Entry, Category,
+  Signer, ImagePath, MD5, SHA256
+FROM source(artifact="Windows.Sysinternals.Autoruns")
+WHERE Enabled = "enabled"
+AND NOT Signer =~ "Microsoft Windows"
+AND NOT Signer =~ "Microsoft Corporation"
+ORDER BY Category
+```
+
+![Unsigned Entries](../screenshots/phase2-04-registry-autoruns_2.png)
+
+**NTUser hive:**
+
+```sql
+SELECT OSPath, Data, Mtime, Username
+FROM source(artifact="Windows.Registry.NTUser")
+LIMIT 50
+```
+
+![NTUser Results](../screenshots/phase2-04-registry-autoruns_3.png)
+
+---
+
+### Baseline Analysis - What Normal Looks Like
+
+**Verified Microsoft entries:**
+
+```
+rdpclip.exe  - RDP Clipboard Monitor - (Verified) Microsoft Windows
+autochk *    - Auto Check Utility    - (Verified) Microsoft Windows
+```
+
+**Non-Microsoft entries on clean FlareVM:**
+
+| Entry | Category | Signer | Verdict |
+|---|---|---|---|
+| iaLPSSi_GPIO | Drivers | (Verified) Intel Corporation | Legitimate - Intel Serial IO driver |
+| SysmonDrv | Drivers | No signer | Expected - Sysmon kernel driver |
+| MidisrvTransferComplete | Codecs | No signer, no path | Benign - MIDI service component |
+| Adobe Type Manager | Drivers | No signer, no path | Benign - legacy font driver |
+| _xtajit / _xtajitf | Known DLLs | No signer | Benign - ARM translation layer |
+
+**NTUser Run keys:** empty on clean FlareVM. Any entry 
+post-compromise is immediately suspicious.
+
+---
+
+### Investigation Triggers
+
+```
+Verified Microsoft signer + System32 path        = legitimate
+No signer + no path + no hash (clean machine)    = benign kernel component
+No signer + no path + no hash (post-compromise)  = investigate immediately
+Unknown signer + Temp or AppData path            = malicious persistence
+New Run key entry not in baseline                = persistence established
+Scheduled task not present in baseline           = new persistence mechanism
+WMI subscription where baseline showed none      = advanced persistence
+```
+
 
 ---
 
