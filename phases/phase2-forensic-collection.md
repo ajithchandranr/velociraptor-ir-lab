@@ -374,7 +374,247 @@ ran - even if the file is deleted from disk before collection.
 
 ---
 
+## Artifact 3 - Windows Event Logs (EVTX)
 
+### What EVTX Covers
+
+Windows Event Logs are the primary audit trail for security 
+events on a Windows endpoint. By default, critical security 
+events are not fully logged - audit policy must be explicitly 
+configured before meaningful IR data is available.
+
+> **Helpline note:** In a helpline engagement, audit policy 
+> will rarely be pre-configured on the target device. Collection 
+> relies on whatever Windows has logged by default. Detection 
+> coverage will be narrower - native logs only, no Sysmon.
+
+---
+
+### Audit Policy Configuration
+
+Before any simulated compromise activity, configure audit policy 
+on FlareVM to ensure full event coverage:
+
+```powershell
+# Process creation with command line
+auditpol /set /subcategory:"Process Creation" /success:enable /failure:enable
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit" /v ProcessCreationIncludeCmdLine_Enabled /t REG_DWORD /d 1 /f
+
+# Logon and logoff
+auditpol /set /subcategory:"Logon" /success:enable /failure:enable
+
+# Scheduled task auditing
+auditpol /set /subcategory:"Other Object Access Events" /success:enable /failure:enable
+
+# Account management
+auditpol /set /subcategory:"User Account Management" /success:enable /failure:enable
+
+# File system access
+auditpol /set /subcategory:"File System" /success:enable /failure:enable
+
+# Privilege use
+auditpol /set /subcategory:"Sensitive Privilege Use" /success:enable /failure:enable
+
+# PowerShell script block logging
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging" /v EnableScriptBlockLogging /t REG_DWORD /d 1 /f
+```
+
+Confirm settings:
+
+```powershell
+auditpol /get /category:"Detailed Tracking"
+auditpol /get /category:"Logon/Logoff"
+```
+
+Expected output:
+
+```
+Detailed Tracking
+  Process Creation    Success and Failure
+
+Logon/Logoff
+  Logon               Success and Failure
+```
+
+---
+
+### Sysmon Installation
+
+Sysmon provides significantly richer telemetry than native 
+Windows auditing. Installed on FlareVM using the SwiftOnSecurity 
+community baseline config.
+
+```powershell
+# Download Sysmon
+Invoke-WebRequest -Uri "https://download.sysinternals.com/files/Sysmon.zip" -OutFile "C:\Windows\Temp\Sysmon.zip"
+
+# Extract
+Expand-Archive -Path "C:\Windows\Temp\Sysmon.zip" -DestinationPath "C:\Windows\Temp\Sysmon"
+
+# Download SwiftOnSecurity config
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml" -OutFile "C:\Windows\Temp\sysmonconfig.xml"
+
+# Install
+cd C:\Windows\Temp\Sysmon
+.\Sysmon64.exe -accepteula -i ..\sysmonconfig.xml
+```
+
+Expected output:
+
+```
+Sysmon64 installed.
+SysmonDrv installed.
+SysmonDrv started.
+Sysmon64 started.
+```
+
+**Why Sysmon over native auditing:**
+
+| Field | Native 4688 | Sysmon Event ID 1 |
+|---|---|---|
+| Process GUID | No | Yes - tracks process across events |
+| Parent command line | No | Yes |
+| File hashes | No | MD5 + SHA256 + IMPHASH |
+| Integrity level | No | Yes |
+| IMPHASH | No | Yes - import hash for malware family grouping |
+
+IMPHASH is a hash of the import table rather than file content. 
+Two malware samples compiled differently but using the same 
+functions share the same IMPHASH - useful for clustering related 
+malware families.
+
+> **Helpline note:** Sysmon will not be present on a helpline 
+> target device. Detection logic in Phase 3 notes where Sysmon 
+> provides additional signal and where native logs alone are 
+> sufficient.
+
+---
+
+### Running the Collection
+
+```
+FlareVM client > New Collection > Windows.EventLogs.Evtx > Launch
+```
+
+Default parameters collect all event log channels. 
+
+![EVTX Collection](../screenshots/phase2-03-evtx-collection.png)
+
+---
+
+### Key Event IDs for the Kill Chain
+
+| Event ID | Channel | What it captures |
+|---|---|---|
+| 4624 | Security | Successful logon |
+| 4625 | Security | Failed logon |
+| 4688 | Security | Process creation with command line |
+| 4698 | Security | Scheduled task created |
+| 4702 | Security | Scheduled task modified |
+| 4720 | Security | User account created |
+| 4732 | Security | Account added to group |
+| 4663 | Security | File accessed |
+| 7045 | System | New service installed |
+| 4103 | PowerShell | Module logging |
+| 4104 | PowerShell | Script block logging |
+| 1 | Sysmon | Process creation |
+| 3 | Sysmon | Network connection |
+| 11 | Sysmon | File created |
+| 13 | Sysmon | Registry value set |
+
+---
+
+### VQL - What to Look at First
+
+```sql
+-- Successful logons
+SELECT System.TimeCreated.SystemTime AS EventTime,
+  System.Computer AS Computer,
+  System.Security.UserID AS UserID,
+  Message
+FROM source(artifact="Windows.EventLogs.Evtx")
+WHERE System.EventID.Value = 4624
+ORDER BY EventTime DESC
+LIMIT 50
+```
+
+```sql
+-- Process creation with command line (requires audit policy enabled)
+SELECT System.TimeCreated.SystemTime AS EventTime,
+  System.Computer AS Computer,
+  System.Security.UserID AS UserID,
+  Message
+FROM source(artifact="Windows.EventLogs.Evtx")
+WHERE System.EventID.Value = 4688
+ORDER BY EventTime DESC
+LIMIT 50
+```
+
+```sql
+-- New services installed
+SELECT System.TimeCreated.SystemTime AS EventTime,
+  System.Computer AS Computer,
+  Message
+FROM source(artifact="Windows.EventLogs.Evtx")
+WHERE System.EventID.Value = 7045
+ORDER BY EventTime DESC
+LIMIT 20
+```
+
+```sql
+-- Sysmon process creation
+SELECT System.TimeCreated.SystemTime AS EventTime,
+  System.Computer AS Computer,
+  Message
+FROM source(artifact="Windows.EventLogs.Evtx")
+WHERE System.Channel = "Microsoft-Windows-Sysmon/Operational"
+AND System.EventID.Value = 1
+ORDER BY EventTime DESC
+LIMIT 50
+```
+
+---
+
+### Baseline Analysis - What Normal Looks Like
+
+On a clean FlareVM the following are confirmed present:
+
+```
+4624  - Service logon events (Logon Type 5) from services.exe  ✓
+4688  - Process creation events with command line               ✓
+7045  - Velociraptor service install captured                   ✓
+Sysmon Event 1 - Process creation with full telemetry          ✓
+```
+
+**Logon types reference:**
+
+```
+Type 2   = Interactive       - user sat at keyboard
+Type 3   = Network           - remote access, file share
+Type 4   = Batch             - scheduled task
+Type 5   = Service           - service account (expected on clean machine)
+Type 7   = Unlock            - screen unlock
+Type 10  = RemoteInteractive - RDP
+Type 11  = CachedInteractive - offline domain logon
+```
+
+During the simulated compromise, Logon Type 3 (network) from 
+an unexpected source IP, or Logon Type 10 (RDP) where RDP was 
+not previously used, are immediate investigation triggers.
+
+---
+
+### Snapshot
+
+After audit policy configuration and Sysmon installation:
+
+```
+VirtualBox > ACR-FlareVM > right-click > Take Snapshot
+Name: FlareVM-Sysmon-Installed-Baseline
+```
+
+This is the Phase 3 starting point for Scenario A. 
+Scenario B reverts to FlareVM-Audit-Configured-NoSysmon.
 
 ---
 
