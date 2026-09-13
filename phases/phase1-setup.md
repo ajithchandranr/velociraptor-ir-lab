@@ -522,3 +522,41 @@ Name: Phase1-Complete-Baseline
 Revert here any time the lab breaks. This is your known-good 
 restore point for all subsequent phases.
 
+---
+
+## Appendix - Removing Everything (Clean Reinstall)
+
+### Ubuntu VM
+
+```bash
+sudo systemctl stop velociraptor
+sudo systemctl disable velociraptor
+sudo rm /etc/systemd/system/velociraptor.service
+sudo systemctl daemon-reload
+sudo rm /usr/local/bin/velociraptor
+sudo rm -rf /opt/velociraptor
+```
+
+### Windows Client
+
+```powershell
+Stop-Service -Name Velociraptor -Force
+.\velociraptor.exe --config client.config.yaml service remove
+Remove-Item -Recurse -Force "C:\Program Files\Velociraptor"
+Remove-Item -Force "C:\Users\$env:USERNAME\velociraptor.exe"
+Remove-Item -Force "C:\Users\$env:USERNAME\client.config.yaml"
+```
+
+### VirtualBox Network
+
+```powershell
+$vbm = "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"
+& $vbm natnetwork modify --netname labnet --port-forward-4 delete "gui"
+& $vbm natnetwork modify --netname labnet --port-forward-4 delete "frontend"
+& $vbm natnetwork modify --netname labnet --port-forward-4 delete "fileserver"
+& $vbm natnetwork remove --netname labnet
+```
+
+
+
+
