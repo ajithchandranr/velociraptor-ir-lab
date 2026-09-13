@@ -393,10 +393,10 @@ configured before meaningful IR data is available.
 ### Audit Policy Configuration
 
 Before any simulated compromise activity, configure audit policy 
-on FlareVM to ensure full event coverage:
+on FlareVM to ensure full event coverage across the kill chain.
 
 ```powershell
-# Process creation with command line
+# Process creation with full command line
 auditpol /set /subcategory:"Process Creation" /success:enable /failure:enable
 reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit" /v ProcessCreationIncludeCmdLine_Enabled /t REG_DWORD /d 1 /f
 
@@ -436,23 +436,31 @@ Logon/Logoff
   Logon               Success and Failure
 ```
 
+> **Note:** Take a snapshot after configuring audit policy - 
+> `FlareVM-Audit-Configured-NoSysmon`. This is the Scenario B 
+> starting point where no Sysmon is present, mirroring a 
+> helpline engagement.
+
 ---
 
 ### Sysmon Installation
 
 Sysmon provides significantly richer telemetry than native 
-Windows auditing. Installed on FlareVM using the SwiftOnSecurity 
-community baseline config.
+Windows auditing alone. Installed using the SwiftOnSecurity 
+community baseline config - the industry standard starting point.
 
 ```powershell
 # Download Sysmon
-Invoke-WebRequest -Uri "https://download.sysinternals.com/files/Sysmon.zip" -OutFile "C:\Windows\Temp\Sysmon.zip"
+Invoke-WebRequest -Uri "https://download.sysinternals.com/files/Sysmon.zip" `
+  -OutFile "C:\Windows\Temp\Sysmon.zip"
 
 # Extract
-Expand-Archive -Path "C:\Windows\Temp\Sysmon.zip" -DestinationPath "C:\Windows\Temp\Sysmon"
+Expand-Archive -Path "C:\Windows\Temp\Sysmon.zip" `
+  -DestinationPath "C:\Windows\Temp\Sysmon"
 
 # Download SwiftOnSecurity config
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml" -OutFile "C:\Windows\Temp\sysmonconfig.xml"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml" `
+  -OutFile "C:\Windows\Temp\sysmonconfig.xml"
 
 # Install
 cd C:\Windows\Temp\Sysmon
@@ -478,15 +486,16 @@ Sysmon64 started.
 | Integrity level | No | Yes |
 | IMPHASH | No | Yes - import hash for malware family grouping |
 
-IMPHASH is a hash of the import table rather than file content. 
-Two malware samples compiled differently but using the same 
-functions share the same IMPHASH - useful for clustering related 
-malware families.
+`IMPHASH` is a hash of a binary's import table rather than its 
+file content. Two malware samples compiled differently but 
+calling the same Windows API functions share the same IMPHASH - 
+useful for clustering related malware families even when file 
+hashes differ.
 
 > **Helpline note:** Sysmon will not be present on a helpline 
-> target device. Detection logic in Phase 3 notes where Sysmon 
+> target device. Phase 3 detection logic notes where Sysmon 
 > provides additional signal and where native logs alone are 
-> sufficient.
+> sufficient for the same detection.
 
 ---
 
@@ -496,7 +505,7 @@ malware families.
 FlareVM client > New Collection > Windows.EventLogs.Evtx > Launch
 ```
 
-Default parameters collect all event log channels. 
+Default parameters collect all event log channels.
 
 ![EVTX Collection](../screenshots/phase2-03-evtx-collection.png)
 
@@ -526,9 +535,14 @@ Default parameters collect all event log channels.
 
 ### VQL - What to Look at First
 
+> **Note:** Use `timestamp(epoch=System.TimeCreated.SystemTime)` 
+> to convert epoch values to readable UTC timestamps. Applied 
+> to all queries below.
+
+**Successful logons:**
+
 ```sql
--- Successful logons - parsed fields
-SELECT System.TimeCreated.SystemTime AS EventTime,
+SELECT timestamp(epoch=System.TimeCreated.SystemTime) AS EventTime,
   System.Computer AS Computer,
   EventData.SubjectUserName AS Subject,
   EventData.TargetUserName AS LogonUser,
@@ -541,10 +555,13 @@ WHERE System.EventID.Value = 4624
 ORDER BY EventTime DESC
 LIMIT 50
 ```
-![EVTX Collection](../screenshots/phase2-03-evtx-collection_logon.png)
+
+![Logon Events](../screenshots/phase2-03-evtx-collection_logon.png)
+
+**Process creation with command line:**
 
 ```sql
-SELECT System.TimeCreated.SystemTime AS EventTime,
+SELECT timestamp(epoch=System.TimeCreated.SystemTime) AS EventTime,
   System.Computer AS Computer,
   EventData.SubjectUserName AS User,
   EventData.NewProcessName AS Process,
@@ -553,12 +570,15 @@ SELECT System.TimeCreated.SystemTime AS EventTime,
 FROM source(artifact="Windows.EventLogs.Evtx")
 WHERE System.EventID.Value = 4688
 ORDER BY EventTime DESC
-LIMIT 20
+LIMIT 50
 ```
-![EVTX Collection](../screenshots/phase2-03-evtx-collection_process_creation.png)
+
+![Process Creation](../screenshots/phase2-03-evtx-collection_process_creation.png)
+
+**New services installed:**
 
 ```sql
-SELECT System.TimeCreated.SystemTime AS EventTime,
+SELECT timestamp(epoch=System.TimeCreated.SystemTime) AS EventTime,
   System.Computer AS Computer,
   EventData.ServiceName AS ServiceName,
   EventData.ImagePath AS ImagePath,
@@ -570,7 +590,10 @@ WHERE System.EventID.Value = 7045
 ORDER BY EventTime DESC
 LIMIT 20
 ```
-![EVTX Collection](../screenshots/phase2-03-evtx-collection_ new_services_installed.png)
+
+![New Services](../screenshots/phase2-03-evtx-collection_new_services.png)
+
+**Sysmon process creation - full telemetry:**
 
 ```sql
 SELECT timestamp(epoch=System.TimeCreated.SystemTime) AS EventTime,
@@ -590,49 +613,61 @@ AND System.EventID.Value = 1
 ORDER BY EventTime DESC
 LIMIT 50
 ```
-![EVTX Collection](../screenshots/phase2-03-evtx-collection_ sysmon.png)
+
+![Sysmon Events](../screenshots/phase2-03-evtx-collection_sysmon.png)
+
 ---
 
 ### Baseline Analysis - What Normal Looks Like
 
-On a clean FlareVM the following are confirmed present:
+Confirmed present on a clean FlareVM after audit policy 
+configuration and Sysmon installation:
 
 ```
 4624  - Service logon events (Logon Type 5) from services.exe  ✓
-4688  - Process creation events with command line               ✓
+4688  - Process creation events with full command line          ✓
 7045  - Velociraptor service install captured                   ✓
-Sysmon Event 1 - Process creation with full telemetry          ✓
+Sysmon Event ID 1 - Process creation with full telemetry       ✓
 ```
 
-**Logon types reference:**
+**Logon type reference:**
 
 ```
-Type 2   = Interactive       - user sat at keyboard
+Type 2   = Interactive       - user at keyboard
 Type 3   = Network           - remote access, file share
-Type 4   = Batch             - scheduled task
-Type 5   = Service           - service account (expected on clean machine)
+Type 4   = Batch             - scheduled task execution
+Type 5   = Service           - service account (normal on clean machine)
 Type 7   = Unlock            - screen unlock
-Type 10  = RemoteInteractive - RDP
+Type 10  = RemoteInteractive - RDP session
 Type 11  = CachedInteractive - offline domain logon
 ```
 
-During the simulated compromise, Logon Type 3 (network) from 
-an unexpected source IP, or Logon Type 10 (RDP) where RDP was 
-not previously used, are immediate investigation triggers.
+**Investigation triggers during simulated compromise:**
+
+```
+Logon Type 3 from unexpected SourceIP  = lateral movement
+Logon Type 10 where RDP not used before = RDP-based intrusion
+New 7045 entry with ImagePath in Temp  = malicious service
+4688 CommandLine with encoded payload  = PowerShell abuse
+Sysmon Event 1 from AppData or Temp   = payload execution
+```
 
 ---
 
 ### Snapshot
 
-After audit policy configuration and Sysmon installation:
+After audit policy configuration and Sysmon installation, 
+take a snapshot before any compromise activity:
 
 ```
 VirtualBox > ACR-FlareVM > right-click > Take Snapshot
 Name: FlareVM-Sysmon-Installed-Baseline
 ```
 
-This is the Phase 3 starting point for Scenario A. 
-Scenario B reverts to FlareVM-Audit-Configured-NoSysmon.
+```
+Scenario A (MSSP)     → start from FlareVM-Sysmon-Installed-Baseline
+Scenario B (Helpline) → revert to FlareVM-Audit-Configured-NoSysmon
+```
 
 ---
 
