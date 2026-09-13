@@ -590,8 +590,7 @@ WHERE System.EventID.Value = 7045
 ORDER BY EventTime DESC
 LIMIT 20
 ```
-
-![New Services](../screenshots/phase2-03-evtx-collection_new_services.png)
+![Process Creation](../screenshots/phase2-03-evtx-collection_process_creation.png)
 
 **Sysmon process creation - full telemetry:**
 
@@ -614,7 +613,7 @@ ORDER BY EventTime DESC
 LIMIT 50
 ```
 
-![Sysmon Events](../screenshots/phase2-03-evtx-collection_sysmon.png)
+![Sysmon Events](../screenshots/phase2-03-evtx-collection_%20sysmon.png)
 
 ---
 
