@@ -290,3 +290,57 @@ were written to this volume during FlareVM setup.
 No timestomping indicators on this machine.
 
 ---
+
+## Detection - Artifact 2 - Prefetch
+
+### Query 1 - Suspicious Execution Paths
+
+```sql
+SELECT Executable, ExecutablePath, LastRunTimes, RunCount
+FROM source(artifact="Windows.Forensics.Prefetch")
+WHERE ExecutablePath =~ "(?i)(appdata|temp|programdata)"
+ORDER BY LastRunTimes DESC
+```
+
+Results returned known legitimate software - OneDrive, Windows
+Defender, Sysmon, and Autoruns. No malicious executables running
+from user-writable locations.
+
+> **Why no payload hit here:** The payload is a `.ps1` script,
+> not an executable. Prefetch records binary executions - the
+> binary that ran was `powershell.exe` from `System32`, not the
+> script itself.
+
+---
+
+### Query 2 - PowerShell Execution History
+
+```sql
+SELECT Executable, ExecutablePath, LastRunTimes, RunCount
+FROM source(artifact="Windows.Forensics.Prefetch")
+WHERE Executable =~ "(?i)powershell"
+ORDER BY LastRunTimes DESC
+```
+
+Results:
+
+![Prefetch PowerShell](../screenshots/phase3-08-prefetch-powershell.png)
+
+**Finding - timeline correlation:**
+
+| Artifact | Timestamp | Event |
+|---|---|---|
+| Prefetch - PowerShell ran | 2026-09-13T19:06:58Z | PowerShell executed |
+| MFT - payload.ps1 created | 2026-09-13T19:07:06Z | File dropped to disk |
+
+PowerShell ran at `19:06:58`. The payload appeared on disk 8
+seconds later at `19:07:06`. This is the execution sequence -
+PowerShell ran and wrote the file.
+
+> **Key point:** Prefetch alone does not tell you what PowerShell
+> did. Combined with the MFT timestamp it builds the timeline.
+> The correlation between these two artifacts is the finding.
+
+---
+
+
