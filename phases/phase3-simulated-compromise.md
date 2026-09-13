@@ -106,10 +106,7 @@ The LNK file simulates the phishing lure - a shortcut that appears
 to be a document but silently executes the payload when opened.
 
 The filename is crafted to target a journalist or human rights
-activist. Access Now was founded in 2009 in direct response to
-the Iranian presidential election and the human rights abuses that
-followed. A file named after that event is exactly what a targeted
-person would open without hesitation.
+activist. 
 
 On FlareVM, open PowerShell as Administrator:
 
