@@ -521,6 +521,125 @@ alone misses this entirely.
 > Autoruns tells you what persistence exists. EVTX tells you
 > when it was created. Neither artifact alone gives the full picture.
 
+---
 
+## Detection - Artifact 5 - Memory Analysis
+
+### Setup
+
+Download the memory image from the Velociraptor GUI:
+
+```bash
+FlareVM client > Collections > Windows.Memory.Acquisition
+> Results tab > Download Results > Prepare Download
+```
+
+On the Ubuntu VM, set the image path:
+
+```bash
+export IMG=~/Downloads/DESKTOP-0KM39H0-C.3211a6665b07c31b-F.DAJFVIDHOT4P8/uploads/auto/PhysicalMemory.dd
+```
+
+---
+
+### Process List
+
+```bash
+vol -f $IMG windows.pslist
+```
+
+Two PowerShell processes identified:
+
+![Volatility pslist](../screenshots/phase3-14-vol-pslist.png)
+
+Both parented to `explorer.exe` (PID 4468) - confirms
+user-initiated execution via the LNK file.
+
+---
+
+### Process Tree
+
+```bash
+vol -f $IMG windows.pstree | grep -A 2 -B 2 "1780\|8524"
+```
+
+Full command line of PID 1780 confirmed in process tree:
+
+```bash
+"C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe"
+-WindowStyle Hidden -ExecutionPolicy Bypass
+-File "C:\Users\acrkmr\AppData\Roaming\Microsoft\Windows\payload.ps1"
+```
+
+---
+
+### Network Connections
+
+```bash
+vol -f $IMG windows.netscan | grep -i "powershell\|ESTABLISHED\|CLOSE"
+```
+
+No output returned.
+
+> **Why netscan returned nothing:** The beacon sleeps 30 seconds
+> between connections. Memory was acquired while the payload was
+> in the sleep phase - no active connection existed at that exact
+> moment. This is a real-world limitation of point-in-time memory
+> acquisition against beaconing malware.
+>
+> The network evidence was captured by Sysmon Event ID 3 which
+> logs every connection attempt as it happens, not just what is
+> active at collection time. This is why cross-artifact
+> correlation matters - no single artifact tells the complete story.
+
+---
+
+### Code Injection Check
+
+```bash
+vol -f $IMG windows.malfind --pid 1780
+```
+
+Three `PAGE_EXECUTE_READWRITE` memory regions found in PID 1780.
+No shellcode signatures visible in the hexdump. This is expected
+behaviour for PowerShell - the .NET runtime uses RWX memory
+regions legitimately.
+
+> **Baseline value:** Establishing what malfind returns on a
+> known payload with no injection is part of the baseline. In a
+> real investigation, unexpected RWX regions with shellcode
+> signatures would be an immediate finding.
+
+---
+
+### DLL List
+
+```bash
+vol -f $IMG windows.dlllist --pid 1780 2>/dev/null | head -40
+```
+
+All DLLs loading from `C:\WINDOWS\System32` - standard paths,
+no unexpected or unsigned DLLs, no reflective loading indicators.
+
+No DLLs loading from user-writable locations. Clean DLL list
+for a PowerShell process.
+
+---
+
+### Memory Analysis Summary
+
+| Plugin | Finding |
+|---|---|
+| `windows.pslist` | Two PowerShell processes - PID 1780 is the beacon |
+| `windows.pstree` | Both spawned by explorer.exe - LNK execution confirmed |
+| `windows.netscan` | No active connection - beacon was in sleep phase |
+| `windows.malfind` | RWX regions present - benign .NET runtime behaviour |
+| `windows.dlllist` | Clean DLL list - no reflective loading |
+
+> **Key lesson:** Memory acquisition is point-in-time. A beaconing
+> payload that sleeps between connections may not show an active
+> network connection at the moment of capture. Sysmon Event ID 3
+> fills this gap - it logs every connection attempt as it happens,
+> not just what is active at collection time.
 
 ---
